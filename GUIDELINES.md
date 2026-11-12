@@ -120,7 +120,26 @@ git push -u origin feature/ten-tinh-nang-cua-ban
 
 ---
 
-## 🔒 4. QUY TẮC BẢO VỆ CSDL
+## 🧪 4. QUY ĐỊNH BẮT BUỘC VỀ KIỂM THỬ API (TESTING TRƯỚC KHI COMMIT)
+
+> ⛔ **NGHIÊM CẤM:** Tuyệt đối không được commit hoặc tạo Pull Request khi chưa tự tay test API chạy thành công trên máy local!
+
+Mỗi thành viên sau khi viết xong API bắt buộc phải tự kiểm thử qua **ít nhất 1 trong 2 công cụ**:
+
+### Cách 1: Dùng Postman
+* **Test trường hợp thành công (Happy Case):** Đảm bảo API trả về mã HTTP `200 OK` và đúng cấu trúc dữ liệu JSON mong muốn.
+* **Test trường hợp dữ liệu sai (Validation Case):** Thử gửi thiếu trường bắt buộc (như để trống `soDienThoai` hoặc `tenDangNhap`), gửi sai định dạng xem hệ thống có chặn đúng không.
+* **Test trường hợp lỗi nghiệp vụ:** Kiểm tra các trường hợp như trùng lặp dữ liệu, tài khoản không tồn tại, sai mật khẩu.
+
+### Cách 2: Dùng Swagger UI (Test trực tiếp trên trình duyệt web)
+* Sau khi bật server bằng lệnh `.\mvnw spring-boot:run`, mở trình duyệt web và truy cập địa chỉ:
+  👉 **`http://localhost:8081/api/v1/swagger-ui.html`**
+* Toàn bộ các API mà nhóm đã viết sẽ tự động xuất hiện trên giao diện này kèm theo mô hình dữ liệu (Schema/DTO).
+* Bấm vào API cần kiểm tra -> Bấm nút **Try it out** -> Nhập dữ liệu JSON test -> Bấm nút **Execute** để xem kết quả phản hồi trực tiếp ngay trên trang web.
+
+---
+
+## 🔒 5. QUY TẮC BẢO VỆ CSDL
 * Trong file `application.yml`, chế độ `spring.jpa.hibernate.ddl-auto` bắt buộc phải là **`validate`** (hoặc `none`).
 * **TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỔI** sang `update` hay `create` vì sẽ làm sai lệch hoặc xóa mất dữ liệu CSDL đã chốt của cả nhóm!
 
