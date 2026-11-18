@@ -12,4 +12,7 @@ public interface TaiKhoanRepository extends JpaRepository<TaiKhoan, Long> {
 
     // Kiểm tra xem tên đăng nhập đã tồn tại chưa ( dùng cho đăng ký)
     boolean existsByTenDangNhap(String tenDangNhap);
+
+    // tìm tài khoản theo số điện thoại của người sở hữu
+    Optional<TaiKhoan> findByNguoi_SoDienThoai(String soDienThoai);
 }
