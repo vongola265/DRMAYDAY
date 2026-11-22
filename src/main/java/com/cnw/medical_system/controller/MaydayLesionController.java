@@ -10,6 +10,7 @@ import com.cnw.medical_system.service.MaydayApiException;
 import com.cnw.medical_system.service.MaydayApiResponse;
 import com.cnw.medical_system.service.MaydayAuthService;
 import com.cnw.medical_system.service.MaydayRecordService;
+import com.cnw.medical_system.service.MaydayPhotoService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +46,7 @@ public class MaydayLesionController {
     private final MaydayAuthService auth;
     private final MaydayRecordService records;
     private final LesionService lesions;
+    private final MaydayPhotoService photos;
 
     @GetMapping("/api/lesion-episodes")
     public ResponseEntity<Map<String, Object>> listEpisodes(
@@ -62,7 +64,14 @@ public class MaydayLesionController {
             @RequestBody Map<String, Object> body) {
         TaiKhoan actor = auth.requireAccount(authorization);
         long recordId = requiredId(body, "medical_record_id");
-        Map<String, Object> record = records.get(recordId, actor);
+        if (auth.isAdmin(actor)) throw new MaydayApiException("1009", "Quản trị viên không tạo đợt tổn thương");
+        Map<String, Object> record;
+        try {
+            record = records.get(recordId, actor);
+        } catch (MaydayApiException exception) {
+            if ("9998".equals(exception.getCode())) throw new MaydayApiException("1009", "Hồ sơ thuộc bệnh nhân khác");
+            throw exception;
+        }
         assertRecordEditable(record);
         long patientId = number(record.get("patient_id"));
         assertCanAccess(patientId, actor);
@@ -82,6 +91,7 @@ public class MaydayLesionController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "medical_record_id", required = false) String medicalRecordId) {
         TaiKhoan actor = auth.requireAccount(authorization);
+        if (auth.isStaff(actor)) throw new MaydayApiException("1009", "Endpoint dành cho bệnh nhân");
         List<LesionEpisodeResponse> episodes = lesions.listEpisodesForPatient(actor.getNguoi().getMaNguoi());
         if (medicalRecordId != null) {
             long recordId = parsePositiveQueryId(medicalRecordId);
@@ -96,8 +106,8 @@ public class MaydayLesionController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
         long id = parseId(recordId);
+        if (!auth.isStaff(actor)) throw new MaydayApiException("1009", "Endpoint dành cho nhân viên y tế");
         Map<String, Object> record = records.get(id, actor);
-        assertRecordEditable(record);
         assertCanAccess(number(record.get("patient_id")), actor);
         return ResponseEntity.ok(MaydayApiResponse.success(lesions.listEpisodesForRecord(id).stream().map(this::episodeData).toList()));
     }
@@ -119,7 +129,7 @@ public class MaydayLesionController {
             @RequestBody Map<String, Object> body) {
         TaiKhoan actor = auth.requireAccount(authorization);
         LesionEpisodeResponse current = lesions.getEpisode(parseId(id));
-        assertCanAccess(current.getPatientId(), actor);
+        assertCanMutate(current.getPatientId(), actor);
         assertRecordEditable(records.get(current.getMedicalRecordId(), actor));
         if (body.isEmpty()) throw new MaydayApiException("1002", "Thiếu trường cần cập nhật");
         LesionEpisodeRequest request = new LesionEpisodeRequest();
@@ -148,9 +158,10 @@ public class MaydayLesionController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
         LesionEpisodeResponse episode = lesions.getEpisode(parseId(id));
-        assertCanAccess(episode.getPatientId(), actor);
+        assertCanMutate(episode.getPatientId(), actor);
+        assertRecordEditable(records.get(episode.getMedicalRecordId(), actor));
         lesions.deleteEpisode(episode.getId());
-        return ResponseEntity.ok(MaydayApiResponse.success(Map.of("deleted", true)));
+        return ResponseEntity.ok(MaydayApiResponse.success(Map.of()));
     }
 
     @PostMapping("/api/lesion-locations")
@@ -160,7 +171,7 @@ public class MaydayLesionController {
         TaiKhoan actor = auth.requireAccount(authorization);
         long episodeId = requiredId(body, "episode_id");
         LesionEpisodeResponse episode = lesions.getEpisode(episodeId);
-        assertCanAccess(episode.getPatientId(), actor);
+        assertCanMutate(episode.getPatientId(), actor);
         assertRecordEditable(records.get(episode.getMedicalRecordId(), actor));
         String bodyPart = requiredText(body, "body_part");
         if (bodyPart.length() > 100 || containsMarkup(bodyPart)) throw invalid("body_part không hợp lệ");
@@ -183,6 +194,17 @@ public class MaydayLesionController {
         return ResponseEntity.ok(MaydayApiResponse.success(data));
     }
 
+    @GetMapping("/api/lesion-photos/location/{locationId}")
+    public ResponseEntity<Map<String, Object>> getPhotosForLocation(
+            @PathVariable String locationId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        TaiKhoan actor = auth.requireAccount(authorization);
+        LesionLocationResponse location = lesions.getLocation(parseId(locationId));
+        LesionEpisodeResponse episode = lesions.getEpisode(location.getEpisodeId());
+        assertCanAccess(episode.getPatientId(), actor);
+        return ResponseEntity.ok(MaydayApiResponse.success(photos.listForLocation(location.getId())));
+    }
+
     @PatchMapping("/api/lesion-locations/{id}")
     public ResponseEntity<Map<String, Object>> patchLocation(
             @PathVariable String id,
@@ -191,7 +213,7 @@ public class MaydayLesionController {
         TaiKhoan actor = auth.requireAccount(authorization);
         LesionLocationResponse current = lesions.getLocation(parseId(id));
         LesionEpisodeResponse parent = lesions.getEpisode(current.getEpisodeId());
-        assertCanAccess(parent.getPatientId(), actor);
+        assertCanMutate(parent.getPatientId(), actor);
         assertRecordEditable(records.get(parent.getMedicalRecordId(), actor));
         if (body.isEmpty()) throw new MaydayApiException("1002", "Thiếu trường cần cập nhật");
 
@@ -219,9 +241,11 @@ public class MaydayLesionController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
         LesionLocationResponse location = lesions.getLocation(parseId(id));
-        assertCanAccess(lesions.getEpisode(location.getEpisodeId()).getPatientId(), actor);
+        assertCanMutate(lesions.getEpisode(location.getEpisodeId()).getPatientId(), actor);
+        LesionEpisodeResponse episode = lesions.getEpisode(location.getEpisodeId());
+        assertRecordEditable(records.get(episode.getMedicalRecordId(), actor));
         lesions.deleteLocation(location.getId());
-        return ResponseEntity.ok(MaydayApiResponse.success(Map.of("deleted", true)));
+        return ResponseEntity.ok(MaydayApiResponse.success(Map.of()));
     }
 
     private void readEpisodeFields(Map<String, Object> body, LesionEpisodeRequest request, boolean partial) {
@@ -261,6 +285,9 @@ public class MaydayLesionController {
             if (!List.of("minute", "hour", "day", "week", "month").contains(value)) throw invalid("medication_unit không hợp lệ");
             unit.accept(value);
         }
+        if (body.containsKey("medication_taken_ago") != body.containsKey("medication_unit")) {
+            throw new MaydayApiException("1002", "Cần cung cấp cả medication_taken_ago và medication_unit");
+        }
     }
 
     private OffsetDateTime parseOccurredAt(Object raw) {
@@ -278,9 +305,14 @@ public class MaydayLesionController {
     private String validateTags(Object raw) {
         if (!(raw instanceof String text)) throw new MaydayApiException("1003", "context_tags sai kiểu dữ liệu");
         try {
-            List<String> values = JSON.readValue(text, new TypeReference<>() {});
-            if (values.isEmpty() || values.size() > 20 || values.stream().anyMatch(value -> value == null || value.isBlank() || value.length() > 50)) {
+            com.fasterxml.jackson.databind.JsonNode values = JSON.readTree(text);
+            if (!values.isArray() || values.isEmpty() || values.size() > 20 || text.length() > 255) {
                 throw invalid("context_tags không hợp lệ");
+            }
+            for (com.fasterxml.jackson.databind.JsonNode value : values) {
+                if (!value.isTextual() || value.asText().isBlank() || value.asText().length() > 50) {
+                    throw invalid("context_tags không hợp lệ");
+                }
             }
             return text;
         } catch (MaydayApiException exception) {
@@ -313,20 +345,24 @@ public class MaydayLesionController {
         }
         if (!(raw instanceof Number) && !(raw instanceof String)) throw new MaydayApiException("1003", "Sai kiểu dữ liệu: " + key);
         String text = String.valueOf(raw);
-        if (!text.matches("[0-9]+")) throw new MaydayApiException("1003", "Sai kiểu dữ liệu: " + key);
+        if (!text.matches("-?[0-9]+")) throw new MaydayApiException("1003", "Sai kiểu dữ liệu: " + key);
         long id = parseId(text);
         if (id <= 0) throw invalid(key + " phải lớn hơn 0");
         return id;
     }
 
     private long parseId(String text) {
-        if (text == null || !text.matches("[0-9]+")) throw new MaydayApiException("1003", "ID sai định dạng");
-        try { return Long.parseLong(text); }
+        if (text == null || !text.matches("-?[0-9]+")) throw new MaydayApiException("1003", "ID sai định dạng");
+        try {
+            long id = Long.parseLong(text);
+            if (id <= 0) throw invalid("ID phải lớn hơn 0");
+            return id;
+        }
         catch (NumberFormatException exception) { throw invalid("ID vượt giới hạn"); }
     }
 
     private long parsePositiveQueryId(String text) {
-        if (!text.matches("[0-9]+")) throw new MaydayApiException("1003", "medical_record_id sai định dạng");
+        if (!text.matches("-?[0-9]+")) throw new MaydayApiException("1003", "medical_record_id sai định dạng");
         long id = parseId(text);
         if (id <= 0) throw invalid("medical_record_id phải lớn hơn 0");
         return id;
@@ -343,8 +379,13 @@ public class MaydayLesionController {
 
     private void assertCanAccess(Long patientId, TaiKhoan actor) {
         if (!auth.isStaff(actor) && !patientId.equals(actor.getNguoi().getMaNguoi())) {
-            throw new MaydayApiException("9998", "Không có quyền truy cập tài nguyên");
+            throw new MaydayApiException("1009", "Không có quyền truy cập tài nguyên");
         }
+    }
+
+    private void assertCanMutate(Long patientId, TaiKhoan actor) {
+        if (auth.isAdmin(actor)) throw new MaydayApiException("1009", "Quản trị viên không được sửa dữ liệu tổn thương");
+        assertCanAccess(patientId, actor);
     }
 
     private boolean containsMarkup(String value) { return value != null && value.matches("(?s).*<[^>]+>.*"); }
@@ -382,7 +423,7 @@ public class MaydayLesionController {
         data.put("medication_unit", location.getTimeUnit());
         data.put("created_at", location.getCreatedAt());
         data.put("updated_at", location.getUpdatedAt());
-        data.put("photos", new ArrayList<>());
+        data.put("photos", photos.listForLocation(location.getId()));
         return data;
     }
 

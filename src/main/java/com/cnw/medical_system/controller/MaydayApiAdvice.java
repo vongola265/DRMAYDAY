@@ -11,9 +11,12 @@ import org.springframework.web.server.ResponseStatusException;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestControllerAdvice
 public class MaydayApiAdvice {
+    private static final Logger log = LoggerFactory.getLogger(MaydayApiAdvice.class);
     @ExceptionHandler(MaydayApiException.class)
     public ResponseEntity<Map<String, Object>> handleApiError(MaydayApiException exception) {
         return ResponseEntity.ok(MaydayApiResponse.error(exception.getCode(), exception.getMessage()));
@@ -41,6 +44,7 @@ public class MaydayApiAdvice {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception exception) {
+        log.error("Unexpected API failure", exception);
         return ResponseEntity.ok(MaydayApiResponse.error("1010", "Lỗi xử lý yêu cầu"));
     }
 }

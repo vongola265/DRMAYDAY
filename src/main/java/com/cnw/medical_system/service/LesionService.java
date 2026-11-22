@@ -21,6 +21,7 @@ import java.util.List;
 public class LesionService {
     private final LesionEpisodeRepository episodes;
     private final LesionLocationRepository locations;
+    private final MaydayPhotoService photos;
 
     @Transactional(readOnly = true)
     public List<LesionEpisodeResponse> listEpisodes() {
@@ -29,12 +30,12 @@ public class LesionService {
 
     @Transactional(readOnly = true)
     public List<LesionEpisodeResponse> listEpisodesForPatient(Long patientId) {
-        return episodes.findByPatientId(patientId).stream().map(this::episodeDto).toList();
+        return episodes.findByPatientIdOrderByCreatedAtDesc(patientId).stream().map(this::episodeDto).toList();
     }
 
     @Transactional(readOnly = true)
     public List<LesionEpisodeResponse> listEpisodesForRecord(Long recordId) {
-        return episodes.findByMedicalRecordId(recordId).stream().map(this::episodeDto).toList();
+        return episodes.findByMedicalRecordIdOrderByCreatedAtDesc(recordId).stream().map(this::episodeDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -77,6 +78,7 @@ public class LesionService {
     @Transactional
     public void deleteEpisode(Long id) {
         LesionEpisode episode = findEpisode(id);
+        photos.deletePhotosForEpisode(id);
         locations.deleteAll(locations.findByEpisode_Id(id));
         episodes.delete(episode);
     }
@@ -84,7 +86,7 @@ public class LesionService {
     @Transactional(readOnly = true)
     public List<LesionLocationResponse> listLocations(Long episodeId) {
         findEpisode(episodeId);
-        return locations.findByEpisode_Id(episodeId).stream().map(this::locationDto).toList();
+        return locations.findByEpisode_IdOrderByCreatedAtAsc(episodeId).stream().map(this::locationDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -123,6 +125,7 @@ public class LesionService {
 
     @Transactional
     public void deleteLocation(Long id) {
+        photos.deletePhotosForLocation(id);
         locations.delete(findLocation(id));
     }
 

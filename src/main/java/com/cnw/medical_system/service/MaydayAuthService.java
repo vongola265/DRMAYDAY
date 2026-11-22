@@ -65,6 +65,10 @@ public class MaydayAuthService {
                 !Boolean.TRUE.equals(account.getTrangThaiHoatDong())) {
             throw new MaydayApiException("9998", "Số điện thoại hoặc mật khẩu không chính xác");
         }
+        return issueToken(account, java.time.Instant.ofEpochMilli(System.currentTimeMillis() + 24L * 60 * 60 * 1000));
+    }
+
+    public static String issueToken(TaiKhoan account, java.time.Instant expiration) {
         SecretKey key = Keys.hmacShaKeyFor(SIGNER_KEY.getBytes(StandardCharsets.UTF_8));
         long now = System.currentTimeMillis();
         return Jwts.builder()
@@ -72,8 +76,9 @@ public class MaydayAuthService {
                 .claim("userId", account.getMaTaiKhoan())
                 .claim("personId", account.getNguoi().getMaNguoi())
                 .claim("role", account.getVaiTro().getTenVaiTro())
+                .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(new Date(now))
-                .expiration(new Date(now + 24L * 60 * 60 * 1000))
+                .expiration(Date.from(expiration))
                 .signWith(key)
                 .compact();
     }
