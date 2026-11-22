@@ -5,6 +5,8 @@ import com.cnw.medical_system.dto.response.*;
 import com.cnw.medical_system.entity.*;
 import com.cnw.medical_system.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
@@ -34,8 +36,8 @@ public class LesionService {
     @Transactional
     public void deleteLocation(Long id) { locations.delete(findLocation(id)); }
 
-    private LesionEpisode findEpisode(Long id) { return episodes.findById(id).orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đợt tổn thương: " + id)); }
-    private LesionLocation findLocation(Long id) { return locations.findById(id).orElseThrow(() -> new IllegalArgumentException("Không tìm thấy vị trí tổn thương: " + id)); }
+    private LesionEpisode findEpisode(Long id) { return episodes.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đợt tổn thương: " + id)); }
+    private LesionLocation findLocation(Long id) { return locations.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy vị trí tổn thương: " + id)); }
     private LesionEpisodeResponse episodeDto(LesionEpisode e) { return new LesionEpisodeResponse(e.getId(), e.getPatientId(), e.getStartDate(), e.getEndDate(), e.getDescription()); }
     private LesionLocationResponse locationDto(LesionLocation l) { return new LesionLocationResponse(l.getId(), l.getEpisode().getId(), l.getBodyPart(), l.getSide(), l.getDescription()); }
 }

@@ -1,13 +1,111 @@
 package com.cnw.medical_system;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
-@SpringBootTest
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:medicaltest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "spring.jpa.hibernate.ddl-auto=create-drop"
+})
+@AutoConfigureMockMvc
 class MedicalSystemApplicationTests {
+    private static final String CONTEXT_PATH = "/api/v1";
 
-	@Test
-	void contextLoads() {
-	}
+    @Autowired
+    MockMvc mockMvc;
 
+    private RequestPostProcessor withContextPath() {
+        return request -> {
+            request.setContextPath(CONTEXT_PATH);
+            return request;
+        };
+    }
+
+    @Test
+    void contextLoads() {
+    }
+
+    @Test
+    void lesionEpisodeAndLocationCrudEndpointsWork() throws Exception {
+        MvcResult createdEpisode = mockMvc.perform(post(CONTEXT_PATH + "/lesion-episodes")
+                        .with(withContextPath())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patientId":1,"startDate":"2026-11-22","description":"Test episode"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.patientId").value(1))
+                .andReturn();
+        long episodeId = readId(createdEpisode);
+
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId).with(withContextPath()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.description").value("Test episode"));
+
+        MvcResult createdLocation = mockMvc.perform(post(CONTEXT_PATH + "/lesion-episodes/{episodeId}/locations", episodeId)
+                        .with(withContextPath())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"episodeId":0,"bodyPart":"arm","side":"left","description":"Test location"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.episodeId").value(episodeId))
+                .andReturn();
+        long locationId = readId(createdLocation);
+
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{episodeId}/locations", episodeId).with(withContextPath()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].bodyPart").value("arm"));
+
+        mockMvc.perform(put(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId)
+                        .with(withContextPath())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"patientId":1,"startDate":"2026-11-22","description":"Updated episode"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.description").value("Updated episode"));
+
+        mockMvc.perform(put(CONTEXT_PATH + "/lesion-episodes/locations/{id}", locationId)
+                        .with(withContextPath())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"episodeId":%d,"bodyPart":"leg","side":"right","description":"Updated location"}
+                                """.formatted(episodeId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bodyPart").value("leg"));
+
+        mockMvc.perform(delete(CONTEXT_PATH + "/lesion-episodes/locations/{id}", locationId).with(withContextPath()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId).with(withContextPath()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes").with(withContextPath()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId).with(withContextPath()))
+                .andExpect(status().isNotFound());
+    }
+
+    private long readId(MvcResult result) throws Exception {
+        String json = result.getResponse().getContentAsString();
+        return new com.fasterxml.jackson.databind.ObjectMapper().readTree(json).get("id").asLong();
+    }
 }
+
