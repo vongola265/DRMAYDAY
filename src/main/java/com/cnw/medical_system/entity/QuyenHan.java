@@ -3,7 +3,7 @@ package com.cnw.medical_system.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "quyenhan")
@@ -28,19 +28,19 @@ public class QuyenHan {
     String moTa;
 
     @Column(name = "thoi_diem_tao", nullable = false, updatable = false)
-    LocalDateTime thoiDiemTao;
+    OffsetDateTime thoiDiemTao;
 
-    @Column(name = "thoi_diem_cap_nhat")
-    LocalDateTime thoiDiemCapNhat;
+    @Column(name = "thoi_diem_cap_nhat", nullable = false)
+    OffsetDateTime thoiDiemCapNhat;
 
     @PrePersist
     protected void onCreate() {
-        this.thoiDiemTao = LocalDateTime.now();
-        this.thoiDiemCapNhat = LocalDateTime.now();
+        this.thoiDiemTao = OffsetDateTime.now();
+        this.thoiDiemCapNhat = OffsetDateTime.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        this.thoiDiemCapNhat = LocalDateTime.now();
+        this.thoiDiemCapNhat = OffsetDateTime.now();
     }
 }

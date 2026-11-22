@@ -9,4 +9,6 @@ public interface NguoiRepository extends JpaRepository<Nguoi, Long> {
     // Kiểm tra số điện thoại đã đăng ký chưa
     boolean existsBySoDienThoai(String soDienThoai);
 
+    java.util.Optional<Nguoi> findBySoDienThoai(String soDienThoai);
+
 }

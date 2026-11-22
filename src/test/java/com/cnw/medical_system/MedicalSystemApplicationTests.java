@@ -14,7 +14,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:medicaltest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -22,7 +21,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.sql.init.mode=always"
 })
 @AutoConfigureMockMvc
 class MedicalSystemApplicationTests {
@@ -31,13 +31,6 @@ class MedicalSystemApplicationTests {
     @Autowired
     MockMvc mockMvc;
 
-    private RequestPostProcessor withContextPath() {
-        return request -> {
-            request.setContextPath(CONTEXT_PATH);
-            return request;
-        };
-    }
-
     @Test
     void contextLoads() {
     }
@@ -45,61 +38,57 @@ class MedicalSystemApplicationTests {
     @Test
     void lesionEpisodeAndLocationCrudEndpointsWork() throws Exception {
         MvcResult createdEpisode = mockMvc.perform(post(CONTEXT_PATH + "/lesion-episodes")
-                        .with(withContextPath())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"patientId":1,"startDate":"2026-11-22","description":"Test episode"}
+                                {"patientId":1,"name":"Test episode","occurredAt":"2026-11-22T10:00:00Z","details":"Test episode"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.patientId").value(1))
                 .andReturn();
         long episodeId = readId(createdEpisode);
 
-        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId).with(withContextPath()))
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.description").value("Test episode"));
+                .andExpect(jsonPath("$.details").value("Test episode"));
 
         MvcResult createdLocation = mockMvc.perform(post(CONTEXT_PATH + "/lesion-episodes/{episodeId}/locations", episodeId)
-                        .with(withContextPath())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"episodeId":0,"bodyPart":"arm","side":"left","description":"Test location"}
+                                {"episodeId":0,"bodyPart":"arm","relatedMedication":"medicine","circumstance":"Test location"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.episodeId").value(episodeId))
                 .andReturn();
         long locationId = readId(createdLocation);
 
-        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{episodeId}/locations", episodeId).with(withContextPath()))
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{episodeId}/locations", episodeId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].bodyPart").value("arm"));
 
         mockMvc.perform(put(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId)
-                        .with(withContextPath())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"patientId":1,"startDate":"2026-11-22","description":"Updated episode"}
+                                {"patientId":1,"name":"Updated episode","occurredAt":"2026-11-22T10:00:00Z","details":"Updated episode"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.description").value("Updated episode"));
+                .andExpect(jsonPath("$.details").value("Updated episode"));
 
         mockMvc.perform(put(CONTEXT_PATH + "/lesion-episodes/locations/{id}", locationId)
-                        .with(withContextPath())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"episodeId":%d,"bodyPart":"leg","side":"right","description":"Updated location"}
+                                {"episodeId":%d,"bodyPart":"leg","relatedMedication":"updated medicine","circumstance":"Updated location"}
                                 """.formatted(episodeId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bodyPart").value("leg"));
 
-        mockMvc.perform(delete(CONTEXT_PATH + "/lesion-episodes/locations/{id}", locationId).with(withContextPath()))
+        mockMvc.perform(delete(CONTEXT_PATH + "/lesion-episodes/locations/{id}", locationId))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(delete(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId).with(withContextPath()))
+        mockMvc.perform(delete(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes").with(withContextPath()))
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
-        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId).with(withContextPath()))
+        mockMvc.perform(get(CONTEXT_PATH + "/lesion-episodes/{id}", episodeId))
                 .andExpect(status().isNotFound());
     }
 

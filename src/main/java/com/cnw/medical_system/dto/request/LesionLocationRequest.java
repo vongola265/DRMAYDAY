@@ -1,18 +1,22 @@
 package com.cnw.medical_system.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.OffsetDateTime;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class LesionLocationRequest {
-    @NotNull private Long episodeId;
-    @NotBlank @Size(max = 150) private String bodyPart;
-    @Size(max = 50) private String side;
-    @Size(max = 1000) private String description;
+    private Long episodeId;
+    @Size(max = 255) private String bodyPart;
+    private OffsetDateTime occurredAt;
+    @Size(max = 255) private String relatedMedication;
+    @Size(max = 100) private String medicationDuration;
+    @Size(max = 255) private String circumstance;
+    private String otherCircumstance;
+    @Size(max = 50) private String timeUnit;
 }

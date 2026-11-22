@@ -17,7 +17,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.web.bind.annotation.PostMapping;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping({"/auth", "/api/v1/auth"})
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class AuthenticationController {
