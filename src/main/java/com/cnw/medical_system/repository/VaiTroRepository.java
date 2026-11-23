@@ -9,4 +9,7 @@ import java.util.Optional;
 public interface VaiTroRepository extends JpaRepository<VaiTro, Long> {
     // Tìm vai trò theo tên
     Optional<VaiTro> findByTenVaiTro(String tenVaiTro);
+
+    // Kiểm tra tên vai trò đã tồn tại chưa
+    boolean existsByTenVaiTroIgnoreCase(String tenVaiTro);
 }
