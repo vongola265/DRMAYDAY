@@ -14,10 +14,4 @@ public final class MaydayApiResponse {
         return response;
     }
 
-    public static Map<String, Object> error(String code, String message) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("code", code);
-        response.put("message", message);
-        return response;
-    }
 }

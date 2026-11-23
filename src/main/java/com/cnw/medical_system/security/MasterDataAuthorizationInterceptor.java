@@ -1,12 +1,12 @@
 package com.cnw.medical_system.security;
 
+import com.cnw.medical_system.dto.response.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -44,7 +44,7 @@ public class MasterDataAuthorizationInterceptor implements HandlerInterceptor {
     private boolean reject(HttpServletResponse response, String code, String message) throws Exception {
         response.setStatus("9998".equals(code) ? 401 : 403);
         response.setContentType("application/json;charset=UTF-8");
-        mapper.writeValue(response.getWriter(), Map.of("code", code, "message", message, "data", Map.of()));
+        mapper.writeValue(response.getWriter(), new ApiResponse<>(code, message, null));
         return false;
     }
 }
