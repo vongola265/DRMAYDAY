@@ -4,10 +4,14 @@ import com.cnw.medical_system.dto.request.LesionEpisodeRequest;
 import com.cnw.medical_system.dto.request.LesionLocationRequest;
 import com.cnw.medical_system.dto.response.LesionEpisodeResponse;
 import com.cnw.medical_system.dto.response.LesionLocationResponse;
+import com.cnw.medical_system.dto.response.ApiResponse;
+import com.cnw.medical_system.dto.response.MaydayLesionEpisodeResponse;
+import com.cnw.medical_system.dto.response.MaydayLesionLocationResponse;
+import com.cnw.medical_system.dto.response.MaydayLesionPhotoResponse;
 import com.cnw.medical_system.entity.TaiKhoan;
+import com.cnw.medical_system.factory.ApiResponseFactory;
 import com.cnw.medical_system.service.LesionService;
 import com.cnw.medical_system.service.MaydayApiException;
-import com.cnw.medical_system.service.MaydayApiResponse;
 import com.cnw.medical_system.service.MaydayAuthService;
 import com.cnw.medical_system.service.MaydayRecordService;
 import com.cnw.medical_system.service.MaydayPhotoService;
@@ -31,7 +35,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,19 +50,20 @@ public class MaydayLesionController {
     private final MaydayRecordService records;
     private final LesionService lesions;
     private final MaydayPhotoService photos;
+    private final ApiResponseFactory apiResponseFactory;
 
     @GetMapping("/api/lesion-episodes")
-    public ResponseEntity<Map<String, Object>> listEpisodes(
+    public ResponseEntity<ApiResponse<List<MaydayLesionEpisodeResponse>>> listEpisodes(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
         List<LesionEpisodeResponse> episodes = auth.isStaff(actor)
                 ? lesions.listEpisodes()
                 : lesions.listEpisodesForPatient(actor.getNguoi().getMaNguoi());
-        return ResponseEntity.ok(MaydayApiResponse.success(episodes.stream().map(this::episodeData).toList()));
+        return apiResponseFactory.success(episodes.stream().map(this::episodeData).toList());
     }
 
     @PostMapping("/api/lesion-episodes")
-    public ResponseEntity<Map<String, Object>> createEpisode(
+    public ResponseEntity<ApiResponse<MaydayLesionEpisodeResponse>> createEpisode(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody Map<String, Object> body) {
         TaiKhoan actor = auth.requireAccount(authorization);
@@ -83,11 +87,11 @@ public class MaydayLesionController {
         request.setMedicalRecordId(recordId);
         request.setName(name);
         readEpisodeFields(body, request, false);
-        return ResponseEntity.ok(MaydayApiResponse.success(episodeData(lesions.createEpisode(request))));
+        return apiResponseFactory.success(episodeData(lesions.createEpisode(request)));
     }
 
     @GetMapping("/api/lesion-episodes/my")
-    public ResponseEntity<Map<String, Object>> getMyEpisodes(
+    public ResponseEntity<ApiResponse<List<MaydayLesionEpisodeResponse>>> getMyEpisodes(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "medical_record_id", required = false) String medicalRecordId) {
         TaiKhoan actor = auth.requireAccount(authorization);
@@ -97,11 +101,11 @@ public class MaydayLesionController {
             long recordId = parsePositiveQueryId(medicalRecordId);
             episodes = episodes.stream().filter(episode -> episode.getMedicalRecordId() != null && episode.getMedicalRecordId() == recordId).toList();
         }
-        return ResponseEntity.ok(MaydayApiResponse.success(episodes.stream().map(this::episodeData).toList()));
+        return apiResponseFactory.success(episodes.stream().map(this::episodeData).toList());
     }
 
     @GetMapping("/api/lesion-episodes/record/{recordId}")
-    public ResponseEntity<Map<String, Object>> getEpisodesByRecord(
+    public ResponseEntity<ApiResponse<List<MaydayLesionEpisodeResponse>>> getEpisodesByRecord(
             @PathVariable String recordId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
@@ -109,21 +113,21 @@ public class MaydayLesionController {
         if (!auth.isStaff(actor)) throw new MaydayApiException("1009", "Endpoint dành cho nhân viên y tế");
         Map<String, Object> record = records.get(id, actor);
         assertCanAccess(number(record.get("patient_id")), actor);
-        return ResponseEntity.ok(MaydayApiResponse.success(lesions.listEpisodesForRecord(id).stream().map(this::episodeData).toList()));
+        return apiResponseFactory.success(lesions.listEpisodesForRecord(id).stream().map(this::episodeData).toList());
     }
 
     @GetMapping("/api/lesion-episodes/{id}")
-    public ResponseEntity<Map<String, Object>> getEpisode(
+    public ResponseEntity<ApiResponse<MaydayLesionEpisodeResponse>> getEpisode(
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
         LesionEpisodeResponse episode = lesions.getEpisode(parseId(id));
         assertCanAccess(episode.getPatientId(), actor);
-        return ResponseEntity.ok(MaydayApiResponse.success(episodeData(episode)));
+        return apiResponseFactory.success(episodeData(episode));
     }
 
     @PatchMapping("/api/lesion-episodes/{id}")
-    public ResponseEntity<Map<String, Object>> patchEpisode(
+    public ResponseEntity<ApiResponse<MaydayLesionEpisodeResponse>> patchEpisode(
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody Map<String, Object> body) {
@@ -149,11 +153,11 @@ public class MaydayLesionController {
             request.setName(name);
         }
         readEpisodeFields(body, request, true);
-        return ResponseEntity.ok(MaydayApiResponse.success(episodeData(lesions.updateEpisode(parseId(id), request))));
+        return apiResponseFactory.success(episodeData(lesions.updateEpisode(parseId(id), request)));
     }
 
     @DeleteMapping("/api/lesion-episodes/{id}")
-    public ResponseEntity<Map<String, Object>> deleteEpisode(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteEpisode(
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
@@ -161,11 +165,11 @@ public class MaydayLesionController {
         assertCanMutate(episode.getPatientId(), actor);
         assertRecordEditable(records.get(episode.getMedicalRecordId(), actor));
         lesions.deleteEpisode(episode.getId());
-        return ResponseEntity.ok(MaydayApiResponse.success(Map.of()));
+        return apiResponseFactory.success(Map.of());
     }
 
     @PostMapping("/api/lesion-locations")
-    public ResponseEntity<Map<String, Object>> createLocation(
+    public ResponseEntity<ApiResponse<MaydayLesionLocationResponse>> createLocation(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody Map<String, Object> body) {
         TaiKhoan actor = auth.requireAccount(authorization);
@@ -180,33 +184,33 @@ public class MaydayLesionController {
         request.setEpisodeId(episodeId);
         request.setBodyPart(bodyPart);
         readLocationFields(body, request);
-        return ResponseEntity.ok(MaydayApiResponse.success(locationData(lesions.createLocation(request))));
+        return apiResponseFactory.success(locationData(lesions.createLocation(request)));
     }
 
     @GetMapping("/api/lesion-locations/episode/{episodeId}")
-    public ResponseEntity<Map<String, Object>> getLocations(
+    public ResponseEntity<ApiResponse<List<MaydayLesionLocationResponse>>> getLocations(
             @PathVariable String episodeId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
         LesionEpisodeResponse episode = lesions.getEpisode(parseId(episodeId));
         assertCanAccess(episode.getPatientId(), actor);
-        List<Map<String, Object>> data = lesions.listLocations(episode.getId()).stream().map(this::locationData).toList();
-        return ResponseEntity.ok(MaydayApiResponse.success(data));
+        List<MaydayLesionLocationResponse> data = lesions.listLocations(episode.getId()).stream().map(this::locationData).toList();
+        return apiResponseFactory.success(data);
     }
 
     @GetMapping("/api/lesion-photos/location/{locationId}")
-    public ResponseEntity<Map<String, Object>> getPhotosForLocation(
+    public ResponseEntity<ApiResponse<List<MaydayLesionPhotoResponse>>> getPhotosForLocation(
             @PathVariable String locationId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
         LesionLocationResponse location = lesions.getLocation(parseId(locationId));
         LesionEpisodeResponse episode = lesions.getEpisode(location.getEpisodeId());
         assertCanAccess(episode.getPatientId(), actor);
-        return ResponseEntity.ok(MaydayApiResponse.success(photos.listForLocation(location.getId())));
+        return apiResponseFactory.success(photos.listForLocation(location.getId()));
     }
 
     @PatchMapping("/api/lesion-locations/{id}")
-    public ResponseEntity<Map<String, Object>> patchLocation(
+    public ResponseEntity<ApiResponse<MaydayLesionLocationResponse>> patchLocation(
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody Map<String, Object> body) {
@@ -232,11 +236,11 @@ public class MaydayLesionController {
             request.setBodyPart(bodyPart);
         }
         readLocationFields(body, request);
-        return ResponseEntity.ok(MaydayApiResponse.success(locationData(lesions.updateLocation(parseId(id), request))));
+        return apiResponseFactory.success(locationData(lesions.updateLocation(parseId(id), request)));
     }
 
     @DeleteMapping("/api/lesion-locations/{id}")
-    public ResponseEntity<Map<String, Object>> deleteLocation(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteLocation(
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
@@ -245,7 +249,7 @@ public class MaydayLesionController {
         LesionEpisodeResponse episode = lesions.getEpisode(location.getEpisodeId());
         assertRecordEditable(records.get(episode.getMedicalRecordId(), actor));
         lesions.deleteLocation(location.getId());
-        return ResponseEntity.ok(MaydayApiResponse.success(Map.of()));
+        return apiResponseFactory.success(Map.of());
     }
 
     private void readEpisodeFields(Map<String, Object> body, LesionEpisodeRequest request, boolean partial) {
@@ -392,39 +396,20 @@ public class MaydayLesionController {
 
     private MaydayApiException invalid(String message) { return new MaydayApiException("1004", message); }
 
-    private Map<String, Object> episodeData(LesionEpisodeResponse episode) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("episode_id", String.valueOf(episode.getId()));
-        data.put("medical_record_id", String.valueOf(episode.getMedicalRecordId()));
-        data.put("patient_id", String.valueOf(episode.getPatientId()));
-        data.put("name", episode.getName());
-        data.put("occurred_at", format(episode.getOccurredAt()));
-        data.put("context_tags", episode.getCircumstance());
-        data.put("context_other", episode.getOtherCircumstance());
-        data.put("medication_name", episode.getMedication());
-        data.put("medication_taken_ago", episode.getMedicationDuration());
-        data.put("medication_unit", episode.getTimeUnit());
-        data.put("description", episode.getDetails());
-        data.put("created_at", episode.getCreatedAt());
-        data.put("updated_at", episode.getUpdatedAt());
-        return data;
+    private MaydayLesionEpisodeResponse episodeData(LesionEpisodeResponse episode) {
+        return new MaydayLesionEpisodeResponse(String.valueOf(episode.getId()),
+                String.valueOf(episode.getMedicalRecordId()), String.valueOf(episode.getPatientId()), episode.getName(),
+                format(episode.getOccurredAt()), episode.getCircumstance(), episode.getOtherCircumstance(),
+                episode.getMedication(), episode.getMedicationDuration(), episode.getTimeUnit(), episode.getDetails(),
+                String.valueOf(episode.getCreatedAt()), String.valueOf(episode.getUpdatedAt()));
     }
 
-    private Map<String, Object> locationData(LesionLocationResponse location) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("lesion_location_id", String.valueOf(location.getId()));
-        data.put("episode_id", String.valueOf(location.getEpisodeId()));
-        data.put("body_part", location.getBodyPart());
-        data.put("occurred_at", format(location.getOccurredAt()));
-        data.put("context_tags", location.getCircumstance());
-        data.put("context_other", location.getOtherCircumstance());
-        data.put("medication_name", location.getRelatedMedication());
-        data.put("medication_taken_ago", location.getMedicationDuration());
-        data.put("medication_unit", location.getTimeUnit());
-        data.put("created_at", location.getCreatedAt());
-        data.put("updated_at", location.getUpdatedAt());
-        data.put("photos", photos.listForLocation(location.getId()));
-        return data;
+    private MaydayLesionLocationResponse locationData(LesionLocationResponse location) {
+        return new MaydayLesionLocationResponse(String.valueOf(location.getId()), String.valueOf(location.getEpisodeId()),
+                location.getBodyPart(), format(location.getOccurredAt()), location.getCircumstance(),
+                location.getOtherCircumstance(), location.getRelatedMedication(), location.getMedicationDuration(),
+                location.getTimeUnit(), String.valueOf(location.getCreatedAt()), String.valueOf(location.getUpdatedAt()),
+                photos.listForLocation(location.getId()));
     }
 
     private String format(OffsetDateTime time) { return time == null ? null : time.withOffsetSameInstant(ZoneOffset.UTC).format(OUTPUT_TIME); }

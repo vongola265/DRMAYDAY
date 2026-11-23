@@ -1,7 +1,8 @@
 package com.cnw.medical_system.controller;
 
 import com.cnw.medical_system.service.MaydayApiException;
-import com.cnw.medical_system.service.MaydayApiResponse;
+import com.cnw.medical_system.dto.response.ApiResponse;
+import com.cnw.medical_system.factory.ApiResponseFactory;
 import com.cnw.medical_system.service.MaydayAuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +19,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MaydayAuthController {
     private final MaydayAuthService auth;
+    private final ApiResponseFactory apiResponseFactory;
 
     @PostMapping("/signup")
-    public ResponseEntity<Map<String, Object>> signup(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> signup(@RequestBody Map<String, Object> body) {
         String fullName = requiredText(body, "full_name");
         String phone = requiredText(body, "phone");
         String password = requiredText(body, "password");
@@ -31,21 +33,21 @@ public class MaydayAuthController {
             throw new MaydayApiException("1004", "Dữ liệu đăng ký không hợp lệ");
         }
         Long userId = auth.signup(fullName, phone, password);
-        return ResponseEntity.ok(MaydayApiResponse.success(Map.of("user_id", userId)));
+        return apiResponseFactory.success(Map.of("user_id", userId));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> login(@RequestBody Map<String, Object> body) {
         String phone = requiredText(body, "phone");
         String password = requiredText(body, "password");
-        return ResponseEntity.ok(MaydayApiResponse.success(Map.of("token", auth.login(phone, password))));
+        return apiResponseFactory.success(Map.of("token", auth.login(phone, password)));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, Object>> logout(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> logout(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         auth.logout(authorization);
-        return ResponseEntity.ok(MaydayApiResponse.success(Map.of("logged_out", true)));
+        return apiResponseFactory.success(Map.of("logged_out", true));
     }
 
     private String requiredText(Map<String, Object> body, String field) {

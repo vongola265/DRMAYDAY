@@ -1,6 +1,8 @@
 package com.cnw.medical_system.service;
 
 import com.cnw.medical_system.entity.TaiKhoan;
+import com.cnw.medical_system.dto.response.MaydayImageAttachmentResponse;
+import com.cnw.medical_system.dto.response.MaydayLesionPhotoResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -15,7 +17,7 @@ public class MaydayPhotoService {
     private final JdbcTemplate jdbc;
     private final MaydayAuthService auth;
 
-    public List<Map<String, Object>> listForLocation(Long locationId) {
+    public List<MaydayLesionPhotoResponse> listForLocation(Long locationId) {
         return jdbc.query("""
                 SELECT a.ma_anh AS photo_id, a.ma_tep_dinh_kem AS attachment_id,
                        COALESCE(t.duong_dan_url, t.duong_dan_luu_tru) AS file_url,
@@ -29,7 +31,7 @@ public class MaydayPhotoService {
                 rs.getObject("captured_at"), rs.getString("milestone")), locationId);
     }
 
-    public Map<String, Object> getAttachment(Long attachmentId, TaiKhoan actor) {
+    public MaydayImageAttachmentResponse getAttachment(Long attachmentId, TaiKhoan actor) {
         List<Map<String, Object>> rows = jdbc.query("""
                 SELECT t.ma_tep_dinh_kem AS attachment_id,
                        COALESCE(t.duong_dan_url, t.duong_dan_luu_tru) AS file_url,
@@ -50,7 +52,9 @@ public class MaydayPhotoService {
         if (!auth.isStaff(actor) && !patientId.equals(actor.getNguoi().getMaNguoi())) {
             throw new MaydayApiException("9998", "Không có quyền xem tệp đính kèm");
         }
-        return attachment;
+        return new MaydayImageAttachmentResponse(
+                String.valueOf(attachment.get("attachment_id")),
+                String.valueOf(attachment.get("file_url")));
     }
 
     public void deletePhotosForLocation(Long locationId) {
@@ -63,16 +67,9 @@ public class MaydayPhotoService {
                 "(SELECT ma_vi_tri_ton_thuong FROM vitritonthuong WHERE ma_dot_ton_thuong_da = ?)", episodeId);
     }
 
-    private Map<String, Object> photoData(Object photoId, Object attachmentId, String fileUrl,
-                                          Object capturedAt, String milestone) {
-        Map<String, Object> attachment = new LinkedHashMap<>();
-        attachment.put("attachment_id", String.valueOf(attachmentId));
-        attachment.put("file_url", fileUrl);
-        Map<String, Object> photo = new LinkedHashMap<>();
-        photo.put("photo_id", String.valueOf(photoId));
-        photo.put("attachment", attachment);
-        photo.put("captured_at", capturedAt);
-        photo.put("milestone", milestone);
-        return photo;
+    private MaydayLesionPhotoResponse photoData(Object photoId, Object attachmentId, String fileUrl,
+                                                 Object capturedAt, String milestone) {
+        return new MaydayLesionPhotoResponse(String.valueOf(photoId),
+                new MaydayImageAttachmentResponse(String.valueOf(attachmentId), fileUrl), capturedAt, milestone);
     }
 }

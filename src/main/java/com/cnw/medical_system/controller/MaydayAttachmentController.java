@@ -1,7 +1,9 @@
 package com.cnw.medical_system.controller;
 
 import com.cnw.medical_system.entity.TaiKhoan;
-import com.cnw.medical_system.service.MaydayApiResponse;
+import com.cnw.medical_system.dto.response.ApiResponse;
+import com.cnw.medical_system.dto.response.MaydayImageAttachmentResponse;
+import com.cnw.medical_system.factory.ApiResponseFactory;
 import com.cnw.medical_system.service.MaydayAuthService;
 import com.cnw.medical_system.service.MaydayPhotoService;
 import lombok.RequiredArgsConstructor;
@@ -11,16 +13,16 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
 public class MaydayAttachmentController {
     private final MaydayAuthService auth;
     private final MaydayPhotoService photos;
+    private final ApiResponseFactory apiResponseFactory;
 
     @GetMapping("/api/image-attachments/view/{attachmentId}")
-    public ResponseEntity<Map<String, Object>> viewAttachment(
+    public ResponseEntity<ApiResponse<MaydayImageAttachmentResponse>> viewAttachment(
             @PathVariable String attachmentId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         TaiKhoan actor = auth.requireAccount(authorization);
@@ -34,6 +36,6 @@ public class MaydayAttachmentController {
             throw new com.cnw.medical_system.service.MaydayApiException("1004", "ID vượt giới hạn");
         }
         if (id <= 0) throw new com.cnw.medical_system.service.MaydayApiException("1004", "ID phải lớn hơn 0");
-        return ResponseEntity.ok(MaydayApiResponse.success(photos.getAttachment(id, actor)));
+        return apiResponseFactory.success(photos.getAttachment(id, actor));
     }
 }
