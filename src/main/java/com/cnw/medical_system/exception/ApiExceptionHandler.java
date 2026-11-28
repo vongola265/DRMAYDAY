@@ -15,28 +15,90 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import com.cnw.medical_system.dto.response.ApiResponse;rt jakarta.servlet.http.HttpServletRequet;t
+import com.cnw.medical_system.dto.response.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
 
-private static final Set<String>MISSING_CODES=Set.of("NotBlank","NotNull","NotEmpty");
+@RestControllerAdvice
+public class ApiExceptionHandler {
 
-eptionHandler(ApiContractException.class)p
+    private static final Set<String> MISSING_CODES = Set.of("NotBlank", "NotNull", "NotEmpty");
 
-}eic ResponseEntiyApiResponse<Vretur Resposentitys
+    @ExceptionHandler(ApiContractException.class)
+    public ResponseEntity<ApiResponse<Void>> contract(ApiContractException e) {
+        return ResponseEntity.status(e.getStatus()).body(new ApiResponse<>(e.getCode(), e.getMessage(), null));
+    }
 
-@ExceptionHandler(NoResourceFoundException.class)public ResponseEntity<ApiResponse<Void>>noRoute(NoResourceFoundException e,HttpServletRequest request){String path=request.getRequestURI();if(path.toLowerCase(Locale.ROOT).contains("%20")||path.chars().anyMatch(Character::isWhitespace)){        return ResponseEntity.badRequest().body(new ApiRespo    }return ResposEntity.statu(HtpStts.O_FOUND).body(new ApiResp
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> notFound(ResourceNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiResponse<>("9992", e.getMessage(), null));
+    }
 
-@ExceptionHandler(HttpMessageNotReadableException.class)public ResponseEntity<ApiResponse<Void>>malformed(HttpMessageNotReadableException e){String msg=e.getMessage()!=null?e.getMessage():"";if(msg.contains("Required request body is missing")){return ResponseEntity.badRequest().body(new ApiResponse<>("1002","Thiếu nội dung yêu cầu",null));}Throwable cause=e.getCause();while(cause!=null){if(cause instanceof java.time.format.DateTimeParseException){return ResponseEntity.badRequest().body(new ApiResponse<>("1004","Định dạng ngày tháng không hợp lệ",null));}cause=cause.getCause();}return ResponseEntity.badRequest().body(new ApiResponse<>("1003","JSON hoặc kiểu dữ liệu không hợp lệ",null));}
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> noRoute(NoResourceFoundException e, HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (path.toLowerCase(Locale.ROOT).contains("%20") || path.chars().anyMatch(Character::isWhitespace)) {
+            return ResponseEntity.badRequest().body(new ApiResponse<>("1004", "Đường dẫn không hợp lệ", null));
+        }
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiResponse<>("9992", "Không tìm thấy dữ liệu", null));
+    }
 
-@ExceptionHandler(HttpMediaTypeNotSupportedException.class)public ResponseEntity<ApiResponse<Void>>unsupported(HttpMediaTypeNotSupportedException e){return ResponseEntity.badRequest().body(new ApiResponse<>("1003","Content-Type không được hỗ trợ",null));}
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> malformed(HttpMessageNotReadableException e) {
+        String msg = e.getMessage() != null ? e.getMessage() : "";
+        if (msg.contains("Required request body is missing")) {
+            return ResponseEntity.badRequest().body(new ApiResponse<>("1002", "Thiếu nội dung yêu cầu", null));
+        }
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause instanceof java.time.format.DateTimeParseException) {
+                return ResponseEntity.badRequest()
+                        .body(new ApiResponse<>("1004", "Định dạng ngày tháng không hợp lệ", null));
+            }
+            cause = cause.getCause();
+        }
+        return ResponseEntity.badRequest().body(new ApiResponse<>("1003", "JSON hoặc kiểu dữ liệu không hợp lệ", null));
+    }
 
-@ExceptionHandler(MethodArgumentTypeMismatchException.class)ic ResponseEntity<ApiResponse<Void>> typeMismatch(MethodArgumentTypeMismatchExcetion e) { 
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> unsupported(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.badRequest().body(new ApiResponse<>("1003", "Content-Type không được hỗ trợ", null));
+    }
 
-    return ResponseEntity.badRequest().body(new ApiResponse<>(co
-}eptionHande(MethodArgumenNoValiEception.class)ic ResponseEtty<ApiResponse<Void>> invalid
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> typeMismatch(MethodArgumentTypeMismatchException e) {
+        String value = e.getValue() == null ? "" : e.getValue().toString();
+        String code = value.matches("-?\\d+") ? "1004" : "1003";
+        return ResponseEntity.badRequest().body(new ApiResponse<>(code, "Tham số không hợp lệ", null));
+    }
 
-if(errors.isEmpty()) {rnResponseEntity.badReques()body(new ApiResponse<>("104" "Dữ liệu không hợp lệ", null))ếu giá trị gửi lên là null hoặc "" (rỗng) và vi phạm NotBlank/NotNull/NotEmpty ->1002/FildError missingError = errors.stea().flter(err -> err.getCode() != null & MSSING_CODES.contains(err.getCode)    .filter(err -> err.getRejectedValue() == null || "".equals(err.getRejectedVale())        .orElse(null);missingError != null) {            : missingError.getied() + " không được để trống";return ResponseEntity.badRequest().body(new ApiResponse<>("1002", message, null));}FildError error = errors.get(0);ng message = error.getDefaultMessage() != null ? error.getDefaultessae() : er
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Void>> invalid(MethodArgumentNotValidException e) {
+        var errors = e.getBindingResult().getFieldErrors();
+        if (errors.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ApiResponse<>("1004", "Dữ liệu không hợp lệ", null));
+        }
+        // Nếu giá trị gửi lên là null hoặc "" (rỗng) và vi phạm
+        // NotBlank/NotNull/NotEmpty -> 1002
+        // Nếu giá trị là khoảng trắng " " -> 1004
+        FieldError missingError = errors.stream()
+                .filter(err -> err.getCode() != null && MISSING_CODES.contains(err.getCode()))
+                .filter(err -> err.getRejectedValue() == null || "".equals(err.getRejectedValue()))
+                .findFirst()
+                .orElse(null);
+        if (missingError != null) {
+            String message = missingError.getDefaultMessage() != null ? missingError.getDefaultMessage()
+                    : missingError.getField() + " không được để trống";
+            return ResponseEntity.badRequest().body(new ApiResponse<>("1002", message, null));
+        }
+        FieldError error = errors.get(0);
+        String message = error.getDefaultMessage() != null ? error.getDefaultMessage()
+                : error.getField() + " không hợp lệ";
+        return ResponseEntity.badRequest().body(new ApiResponse<>("1004", message, null));
+    }
 
-@    public ResponseEntity<ApiResponse<Void>> constraint(DataIntegrityViolationException e) {
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> constraint(DataIntegrityViolationException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiResponse<>("9996", "Dữ liệu bị trùng hoặc vi phạm ràng buộc", null));
     }
