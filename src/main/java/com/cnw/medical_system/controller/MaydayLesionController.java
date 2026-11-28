@@ -15,6 +15,7 @@ import com.cnw.medical_system.service.MaydayApiException;
 import com.cnw.medical_system.service.MaydayAuthService;
 import com.cnw.medical_system.service.MaydayRecordService;
 import com.cnw.medical_system.service.MaydayPhotoService;
+import com.cnw.medical_system.service.MaydayLesionPhotoService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,7 @@ public class MaydayLesionController {
     private final MaydayRecordService records;
     private final LesionService lesions;
     private final MaydayPhotoService photos;
+    private final MaydayLesionPhotoService lesionPhotos;
     private final ApiResponseFactory apiResponseFactory;
 
     @GetMapping("/api/lesion-episodes")
@@ -206,7 +208,30 @@ public class MaydayLesionController {
         LesionLocationResponse location = lesions.getLocation(parseId(locationId));
         LesionEpisodeResponse episode = lesions.getEpisode(location.getEpisodeId());
         assertCanAccess(episode.getPatientId(), actor);
-        return apiResponseFactory.success(photos.listForLocation(location.getId()));
+        return apiResponseFactory.success(lesionPhotos.list(location.getId(), actor));
+    }
+
+    @PostMapping("/api/lesion-photos")
+    public ResponseEntity<ApiResponse<MaydayLesionPhotoResponse>> createPhoto(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody Map<String, Object> body) {
+        return apiResponseFactory.success(lesionPhotos.create(auth.requireAccount(authorization), body));
+    }
+
+    @PatchMapping("/api/lesion-photos/{id}/milestone")
+    public ResponseEntity<ApiResponse<MaydayLesionPhotoResponse>> updatePhoto(
+            @PathVariable String id,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody Map<String, Object> body) {
+        return apiResponseFactory.success(lesionPhotos.update(parseId(id), auth.requireAccount(authorization), body));
+    }
+
+    @DeleteMapping("/api/lesion-photos/{id}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deletePhoto(
+            @PathVariable String id,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        lesionPhotos.delete(parseId(id), auth.requireAccount(authorization));
+        return apiResponseFactory.success(Map.of());
     }
 
     @PatchMapping("/api/lesion-locations/{id}")

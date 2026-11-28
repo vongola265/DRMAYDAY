@@ -72,6 +72,9 @@ public class MaydayRecordService {
                 .orElseThrow(() -> new MaydayApiException("9992", "Không tìm thấy hồ sơ bệnh án"));
         if (!auth.isAdmin(actor)) verifyAccess(record, actor);
 
+        jdbc.update("DELETE FROM mayday_answer_images WHERE answer_id IN (SELECT answer_id FROM mayday_medical_record_answers WHERE medical_record_id = ?)", id);
+        jdbc.update("DELETE FROM mayday_medical_record_answers WHERE medical_record_id = ?", id);
+        jdbc.update("DELETE FROM nhatkyuashangngay WHERE ma_ho_so_man = ?", id);
         jdbc.update("DELETE FROM anhchuptonthuong WHERE ma_dot_ton_thuong_da IN (SELECT ma_dot_ton_thuong_da FROM dottonthuongda WHERE ma_ho_so_man = ?)", id);
         jdbc.update("DELETE FROM anhchuptonthuong WHERE ma_vi_tri_ton_thuong IN (SELECT v.ma_vi_tri_ton_thuong FROM vitritonthuong v JOIN dottonthuongda e ON e.ma_dot_ton_thuong_da = v.ma_dot_ton_thuong_da WHERE e.ma_ho_so_man = ?)", id);
         jdbc.update("DELETE FROM vitritonthuong WHERE ma_dot_ton_thuong_da IN (SELECT ma_dot_ton_thuong_da FROM dottonthuongda WHERE ma_ho_so_man = ?)", id);

@@ -6,6 +6,8 @@ import com.cnw.medical_system.factory.ApiResponseFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -28,6 +30,16 @@ public class MaydayApiAdvice {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Object>> handleInvalidJson(HttpMessageNotReadableException exception) {
         return apiResponseFactory.error("1003", "JSON không hợp lệ");
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException exception) {
+        return apiResponseFactory.error("1003", "Content-Type không được hỗ trợ");
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleOversizedUpload(MaxUploadSizeExceededException exception) {
+        return apiResponseFactory.error("1006", "Tệp vượt quá giới hạn cho phép");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

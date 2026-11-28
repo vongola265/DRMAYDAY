@@ -3,6 +3,11 @@ server:
   port: 8081
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 11MB
+      max-request-size: 25MB
+
   datasource:
     url: jdbc:postgresql://127.0.0.1:55432/mayday_test
     username: postgres
@@ -12,3 +17,7 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: validate
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-local.sql
