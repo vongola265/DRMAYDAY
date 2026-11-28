@@ -25,12 +25,18 @@ import javax.management.RuntimeErrorException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.http.HttpStatus;
+import com.cnw.medical_system.exception.ApiContractException;
 import org.springframework.transaction.annotation.Transactional;
 import com.cnw.medical_system.dto.request.RegisterRequest;
 import com.cnw.medical_system.dto.request.ResetPasswordRequest;
 import com.cnw.medical_system.entity.VaiTro;
 import com.cnw.medical_system.entity.Nguoi;
+import com.cnw.medical_system.dto.response.UserAdminResponse;
 import com.cnw.medical_system.dto.response.UserResponse;
+import com.cnw.medical_system.mapper.UserMapper;
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.cnw.medical_system.dto.request.ChangePasswordRequest;
 import com.cnw.medical_system.dto.request.CreateStaffRequest;
@@ -47,10 +53,12 @@ public class AuthenticationService {
     VaiTroRepository vaiTroRepository;
     TokenBlacklistService tokenBlacklistService;
     OtpService otpService;
+    UserMapper userMapper;
     // Khóa bí mật để ký token ( chuỗi phải dài tối thiểu 32 ký tự để đảm bảo chuẩn
     // SHA-256)
     public static final String SIGNER_KEY = "MedicalSystemSecretKeyForJwtTokenSigningMustBe256BitsLong!";
     PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    ConcurrentHashMap<String, Integer> failedLoginAttempts = new ConcurrentHashMap<>();
 
     // Quên mật khẩu: kiểm tra số điện thoại và cấp mã OTP
     @Transactional(readOnly = true)
@@ -75,12 +83,12 @@ public class AuthenticationService {
     // Đặt lại mật khẩu mới khi có mã OTP
     @Transactional
     public String resetPassWord(ResetPasswordRequest request) {
+        TaiKhoan taiKhoan = taiKhoanRepository.findByNguoi_SoDienThoai(request.getSoDienThoai())
+                .orElseThrow(() -> new RuntimeException("Số điện thoại chưa được đăng ký trên hệ thống"));
         // xác thực OTP
         boolean isValid = otpService.validateOtp(request.getSoDienThoai(), request.getMaOtp());
         if (!isValid)
-            throw new RuntimeException("Mã OTP không chính xác hoặc đã hết hạn");
-        TaiKhoan taiKhoan = taiKhoanRepository.findByNguoi_SoDienThoai(request.getSoDienThoai())
-                .orElseThrow(() -> new RuntimeException("Số điện thoại chưa được đăng ký trên hệ thống"));
+            throw new ApiContractException(HttpStatus.BAD_REQUEST, "9993", "Mã OTP không chính xác hoặc đã hết hạn");
         // mã hóa BCrypt mật khẩu mới và lưu lại
         taiKhoan.setMatKhauMaHoa(passwordEncoder.encode(request.getMatKhauMoi()));
         taiKhoanRepository.save(taiKhoan);
@@ -102,7 +110,7 @@ public class AuthenticationService {
     }
 
     @Transactional
-    public String createStaff(CreateStaffRequest request) {
+    public UserAdminResponse createStaff(CreateStaffRequest request) {
         // 1.Lấy thông tin người đang thực hiện gọi API từ Token
         var context = SecurityContextHolder.getContext();
         String currentUsername = context.getAuthentication().getName();
@@ -129,17 +137,19 @@ public class AuthenticationService {
         VaiTro vaiTro = null;
         if (request.getMaVaiTro() != null) {
             vaiTro = vaiTroRepository.findById(request.getMaVaiTro())
-                    .orElseThrow(() -> new RuntimeException("Vai trò ID" + request.getMaVaiTro() + " không tồn tại"));
+                    .orElseThrow(() -> new RuntimeException("Vai trò ID " + request.getMaVaiTro() + " không tồn tại"));
         } else if (request.getTenVaiTro() != null) {
             vaiTro = vaiTroRepository.findByTenVaiTro(request.getTenVaiTro())
                     .orElseThrow(() -> new RuntimeException("Vai trò '" + request.getTenVaiTro() + "' không tồn tại"));
         } else {
             // mặc định không truyền thì gán vai trò bác sĩ
             vaiTro = vaiTroRepository.findByTenVaiTro("bac_si")
+                    .or(() -> vaiTroRepository.findByTenVaiTro("doctor"))
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy vai trò bác sĩ trong hệ thống"));
         }
         // Không cho tạo nhân viên với vai trò là bệnh nhân hoặc admin
-        if ("benh_nhan".equalsIgnoreCase(vaiTro.getTenVaiTro()) || "admin".equalsIgnoreCase(vaiTro.getTenVaiTro())) {
+        if ("benh_nhan".equalsIgnoreCase(vaiTro.getTenVaiTro()) || "patient".equalsIgnoreCase(vaiTro.getTenVaiTro())
+                || "admin".equalsIgnoreCase(vaiTro.getTenVaiTro())) {
             throw new RuntimeException("Chỉ được phép tạo tài khoản cho nhân viên y tế (Bác sĩ, Điều dưỡng)");
         }
 
@@ -151,9 +161,8 @@ public class AuthenticationService {
         TaiKhoan taiKhoan = TaiKhoan.builder().nguoi(nguoi).vaiTro(vaiTro).tenDangNhap(username)
                 .matKhauMaHoa(passwordEncoder.encode(request.getMatKhau())).trangThaiHoatDong(true).build();
 
-        taiKhoanRepository.save(taiKhoan);
-        return "Tạo tài khoản nhân viên thành công với vai trò: " + nguoi.getHoTen() + " (" + vaiTro.getTenHienThi()
-                + ")";
+        taiKhoan = taiKhoanRepository.save(taiKhoan);
+        return userMapper.toUserAdminResponse(taiKhoan);
     }
 
     @Transactional
@@ -208,56 +217,104 @@ public class AuthenticationService {
 
     @Transactional(readOnly = true)
     public LoginResponse authenticate(LoginRequest request) {
-        // 1. tìm tài khoản theo tên đăng nhập
-        TaiKhoan taiKhoan = taiKhoanRepository.findByTenDangNhap(request.getTenDangNhap())
-                .orElseThrow(() -> new RuntimeException("Tên đăng nhập hoặc mật khẩu không chính xác"));
+        String loginId = request.getTenDangNhap();
+        if (!loginId.matches("^0[35789][0-9]{8}$") && !loginId.matches("^[a-zA-Z0-9_]{3,50}$")) {
+            throw new ApiContractException(HttpStatus.BAD_REQUEST, "1004", "Số điện thoại hoặc tên đăng nhập không hợp lệ");
+        }
+        int attempts = failedLoginAttempts.getOrDefault(loginId, 0);
+        if (attempts >= 5) {
+            throw new ApiContractException(HttpStatus.FORBIDDEN, "1009",
+                    "Tài khoản tạm thời bị khóa do nhập sai mật khẩu quá nhiều lần");
+        }
+
+        // 1. tìm tài khoản theo tên đăng nhập hoặc số điện thoại
+        TaiKhoan taiKhoan = taiKhoanRepository.findByTenDangNhap(loginId)
+                .or(() -> taiKhoanRepository.findByNguoi_SoDienThoai(loginId))
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản trên hệ thống"));
         // 2. kiểm tra mật khẩu (so khớp mật khẩu thô và mật khẩu mã hóa Bcrypt)
         boolean matches = passwordEncoder.matches(request.getMatKhau(), taiKhoan.getMatKhauMaHoa());
         if (!matches) {
+            failedLoginAttempts.put(loginId, attempts + 1);
+            if (attempts + 1 >= 5) {
+                throw new ApiContractException(HttpStatus.FORBIDDEN, "1009",
+                        "Tài khoản tạm thời bị khóa do nhập sai mật khẩu quá nhiều lần");
+            }
             throw new RuntimeException("Tên đăng nhập hoặc mật khẩu không chính xác");
         }
         // 3.Kiểm tra tài khoản có bị vô hiệu háo không
         if (!Boolean.TRUE.equals(taiKhoan.getTrangThaiHoatDong())) {
             throw new RuntimeException("Tài khoản của bạn hiện đang bị khóa");
         }
+        failedLoginAttempts.remove(loginId);
         // 4.Sinh JWT token
         String token = generateToken(taiKhoan);
         // 5. trả về kết quả
-        return LoginResponse.builder().token(token).authenticated(true).tenDangNhap(taiKhoan.getTenDangNhap())
-                .vaiTro(taiKhoan.getVaiTro() != null ? taiKhoan.getVaiTro().getTenVaiTro() : null).build();
+        return LoginResponse.builder()
+                .token(token)
+                .authenticated(true)
+                .tenDangNhap(taiKhoan.getTenDangNhap())
+                .vaiTro(taiKhoan.getVaiTro() != null ? taiKhoan.getVaiTro().getTenVaiTro() : null)
+                .userInfo(userMapper.toUserAdminResponse(taiKhoan))
+                .build();
     }
 
     @Transactional
-    public String signup(RegisterRequest request) {
+    public UserAdminResponse signup(RegisterRequest request) {
+        if (request.getHoTen() != null && request.getHoTen().matches("(?i).*<\\s*/?\\s*(script|iframe|img|svg|object|embed).*")) {
+            throw new ApiContractException(HttpStatus.BAD_REQUEST, "1004", "Họ và tên chứa ký tự không hợp lệ");
+        }
+        String username = (request.getTenDangNhap() != null && !request.getTenDangNhap().isBlank())
+                ? request.getTenDangNhap().trim()
+                : request.getSoDienThoai().trim();
+
         // 1.Kiểm tra xem tên đăng nhập đã tồn tại chưa
-        if (taiKhoanRepository.existsByTenDangNhap((request.getTenDangNhap()))) {
+        if (taiKhoanRepository.existsByTenDangNhap(username)) {
             throw new RuntimeException("Tên đăng nhập đã tồn tại trên hệ thống");
         }
         // 2.Kiểm tra xem số điện thoại đã được đăng ký chưa
         if (nguoiRepository.existsBySoDienThoai(request.getSoDienThoai())) {
             throw new RuntimeException("Số điện thoại này đã được sử dụng");
         }
-        // 3. Lấy vai trò mặc định cho người đăng ký mới (vai trò 'benh_nhan' đã có sẵn
-        // trong DB)
+        // 3. Lấy vai trò mặc định cho người đăng ký mới (vai trò 'benh_nhan' đã có sẵn trong DB)
         VaiTro vaitTroMacDinh = vaiTroRepository.findByTenVaiTro("benh_nhan")
+                .or(() -> vaiTroRepository.findByTenVaiTro("patient"))
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy vai trò mặc định trong hệ thống"));
 
+        String normalizedGender = null;
+        if (request.getGioiTinh() != null) {
+            if ("male".equals(request.getGioiTinh())) {
+                normalizedGender = "Nam";
+            } else if ("female".equals(request.getGioiTinh())) {
+                normalizedGender = "Nu";
+            } else {
+                throw new ApiContractException(HttpStatus.BAD_REQUEST, "1004", "Giới tính không hợp lệ");
+            }
+        }
+
         // 4. Tạo và lưu thông tin cá nhân vào bảng 'nguoi'
-        Nguoi nguoi = Nguoi.builder().hoTen(request.getHoTen()).soDienThoai(request.getSoDienThoai()).build();
+        Nguoi nguoi = Nguoi.builder()
+                .hoTen(request.getHoTen().trim())
+                .soDienThoai(request.getSoDienThoai().trim())
+                .gioiTinh(normalizedGender)
+                .build();
         nguoi = nguoiRepository.save(nguoi);
 
         // 5.Tạo và lưu tài khoản vào bảng 'taikhoan' với mật khẩu đã mã hóa BCrypt
-        TaiKhoan taiKhoan = TaiKhoan.builder().nguoi(nguoi).vaiTro(vaitTroMacDinh).tenDangNhap(request.getTenDangNhap())
+        TaiKhoan taiKhoan = TaiKhoan.builder().nguoi(nguoi).vaiTro(vaitTroMacDinh).tenDangNhap(username)
                 .matKhauMaHoa(passwordEncoder.encode(request.getMatKhau())).trangThaiHoatDong(true).build();
-        taiKhoanRepository.save(taiKhoan);
-        return "Đăng ký tài khoản thành công!";
+        taiKhoan = taiKhoanRepository.save(taiKhoan);
+        return userMapper.toUserAdminResponse(taiKhoan);
     }
 
     private String generateToken(TaiKhoan taiKhoan) {
         SecretKey key = Keys.hmacShaKeyFor(SIGNER_KEY.getBytes(StandardCharsets.UTF_8));
-        return Jwts.builder().subject(taiKhoan.getTenDangNhap()).claim("userId", taiKhoan.getMaTaiKhoan())
+        return Jwts.builder()
+                .id(UUID.randomUUID().toString())
+                .subject(taiKhoan.getTenDangNhap())
+                .claim("userId", taiKhoan.getMaTaiKhoan())
                 .claim("role", taiKhoan.getVaiTro() != null ? taiKhoan.getVaiTro().getTenVaiTro() : "")
-                .issuedAt(new Date()).expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24))
                 .signWith(key).compact();
     }
 }

@@ -26,7 +26,7 @@ public interface UserMapper {
         return ProfileResponse.builder().maTaiKhoan(taiKhoan.getMaTaiKhoan()).tenDangNhap(taiKhoan.getTenDangNhap())
                 .hoTen(nguoi != null ? nguoi.getHoTen() : null)
                 .soDienThoai(nguoi != null ? nguoi.getSoDienThoai() : null)
-                .gioiTinh(nguoi != null ? nguoi.getGioiTinh() : null)
+                .gioiTinh(toExternalGender(nguoi != null ? nguoi.getGioiTinh() : null))
                 .ngaySinh(nguoi != null ? nguoi.getNgaySinh() : null)
                 .namSinh((nguoi != null && nguoi.getNgaySinh() != null) ? nguoi.getNgaySinh().getYear() : null)
                 .diaChiSoNhaThonPho(nguoi != null ? nguoi.getDiaChiSoNhaThonPho() : null)
@@ -45,7 +45,8 @@ public interface UserMapper {
     }
 
     default UserAdminResponse toUserAdminResponse(TaiKhoan taiKhoan) {
-        if (taiKhoan == null) return null;
+        if (taiKhoan == null)
+            return null;
         Nguoi nguoi = taiKhoan.getNguoi();
         VaiTro vaiTro = taiKhoan.getVaiTro();
         return UserAdminResponse.builder()
@@ -53,11 +54,19 @@ public interface UserMapper {
                 .username(taiKhoan.getTenDangNhap())
                 .fullName(nguoi != null ? nguoi.getHoTen() : null)
                 .phone(nguoi != null ? nguoi.getSoDienThoai() : null)
-                .gender(nguoi != null ? nguoi.getGioiTinh() : null)
+                .gender(toExternalGender(nguoi != null ? nguoi.getGioiTinh() : null))
                 .roleId(vaiTro != null ? vaiTro.getMaVaiTro() : null)
                 .roleName(vaiTro != null ? vaiTro.getTenVaiTro() : null)
                 .isActive(taiKhoan.getTrangThaiHoatDong() != null && taiKhoan.getTrangThaiHoatDong() ? 1 : 0)
                 .createdAt(taiKhoan.getThoiDiemTao())
                 .build();
+    }
+
+    default String toExternalGender(String dbGender) {
+        if ("Nam".equals(dbGender))
+            return "male";
+        if ("Nu".equals(dbGender))
+            return "female";
+        return dbGender;
     }
 }

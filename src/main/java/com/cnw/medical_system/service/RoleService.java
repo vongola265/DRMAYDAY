@@ -60,6 +60,7 @@ public class RoleService {
     // API 16: get_list_roles
     @Transactional(readOnly = true)
     public RoleListResponse getAllRoles() {
+        checkAdminPermission();
         // Lấy tất cả vai trò sắp xếp tăng dần theo id
         List<VaiTro> list = vaiTroRepository.findAll(Sort.by("maVaiTro").ascending());
         List<RoleResponse> roleResponses = list.stream().map(vt -> RoleResponse.builder().id(vt.getMaVaiTro())

@@ -18,6 +18,10 @@ import lombok.experimental.FieldDefaults;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class UserListResponse {
 
+    @Builder.Default
+    @JsonProperty("code")
+    String code = "1000";
+
     @JsonProperty("total")
     Long total;
 

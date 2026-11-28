@@ -27,6 +27,8 @@ import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
 import com.cnw.medical_system.dto.response.UserListResponse;
+import org.springframework.http.HttpStatus;
+import com.cnw.medical_system.exception.ApiContractException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,7 +106,7 @@ public class UserService {
         }
         // 4. Kiểm tra họ tên nếu truyền lên không được là chuỗi trắng
         if (request.getHoTen() != null && request.getHoTen().trim().isEmpty()) {
-            throw new RuntimeException("Họ và tên không được để trống");
+            throw new ApiContractException(HttpStatus.BAD_REQUEST, "1004", "Họ và tên không được để trống");
         }
         // 5. Tìm tài khoản cần sửa
         TaiKhoan targetAccount = taiKhoanRepository.findById(id)
@@ -309,12 +311,32 @@ public class UserService {
     // api set User info
     @Transactional
     public ProfileResponse setUserInfo(UpdateProfileRequest request) {
+        if (request == null || request.hasNoValidFields()) {
+            throw new ApiContractException(HttpStatus.BAD_REQUEST, "1002", "Không có dữ liệu hợp lệ để cập nhật");
+        }
+        if (request.getHoTen() != null && request.getHoTen().trim().isEmpty()) {
+            throw new ApiContractException(HttpStatus.BAD_REQUEST, "1004", "Họ và tên không được để trống");
+        }
+        // Kiểm tra XSS đơn giản
+        for (String val : java.util.Arrays.asList(request.getHoTen(), request.getDiaChiSoNhaThonPho(),
+                request.getDiaChiXaPhuong(), request.getDiaChiTinhTp(), request.getNgheNghiep(),
+                request.getDanToc(), request.getBhytSoThe(), request.getNguoiNhaHoTenDiaChi())) {
+            if (val != null && val.matches("(?i).*<\\s*/?\\s*(script|iframe|img|svg|object|embed).*")) {
+                throw new ApiContractException(HttpStatus.BAD_REQUEST, "1004",
+                        "Nội dung chứa mã HTML/Script không hợp lệ");
+            }
+        }
+
         TaiKhoan taiKhoan = getCurrentAccount();
         Nguoi nguoi = taiKhoan.getNguoi();
         // 1. MapStruct tự động cập nhật mọi trường khác null cho 'nguoi'
         userMapper.updateNguoi(nguoi, request);
+        if (request.getHoTen() != null)
+            nguoi.setHoTen(request.getHoTen().trim());
         if (request.getGioiTinh() != null)
             nguoi.setGioiTinh(normalizeGender(request.getGioiTinh()));
+        else if (request.getPresentFields().contains("gioiTinh"))
+            nguoi.setGioiTinh(null);
         if (request.getNgaySinh() != null)
             nguoi.setNgaySinh(request.getNgaySinh());
         else if (request.getNamSinh() != null)
@@ -327,9 +349,21 @@ public class UserService {
         userMapper.updateBenhNhan(benhNhan, request);
         if (request.getNgheNghiep() != null)
             benhNhan.setNgheNghiep((normalizeCareer(request.getNgheNghiep())));
+        else if (request.getPresentFields().contains("ngheNghiep"))
+            benhNhan.setNgheNghiep(null);
+        if (request.getPresentFields().contains("danToc") && request.getDanToc() == null)
+            benhNhan.setDanToc(null);
+        if (request.getPresentFields().contains("bhytSoThe") && request.getBhytSoThe() == null)
+            benhNhan.setBhytSoThe(null);
+        if (request.getPresentFields().contains("bhytGiaTriDen") && request.getBhytGiaTriDen() == null)
+            benhNhan.setBhytGiaTriDen(null);
+        if (request.getPresentFields().contains("nguoiNhaHoTenDiaChi") && request.getNguoiNhaHoTenDiaChi() == null)
+            benhNhan.setNguoiNhaHoTenDiaChi(null);
+        if (request.getPresentFields().contains("nguoiNhaSoDienThoai") && request.getNguoiNhaSoDienThoai() == null)
+            benhNhan.setNguoiNhaSoDienThoai(null);
+
         benhNhanRepository.save(benhNhan);
         return userMapper.toProfileResponse(taiKhoan, benhNhan);
-
     }
 
     private String normalizeCareer(String c) {
@@ -353,9 +387,10 @@ public class UserService {
     private TaiKhoan getCurrentAccount() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         TaiKhoan taiKhoan = taiKhoanRepository.findByTenDangNhap(username)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin tài khoản "));
+                .orElseThrow(() -> new ApiContractException(HttpStatus.UNAUTHORIZED, "9998",
+                        "Tài khoản không tồn tại hoặc token không hợp lệ"));
         if (!Boolean.TRUE.equals(taiKhoan.getTrangThaiHoatDong())) {
-            throw new RuntimeException("Tài khoản hiện đang bị khóa ");
+            throw new ApiContractException(HttpStatus.FORBIDDEN, "1009", "Tài khoản hiện đang bị khóa");
         }
         return taiKhoan;
     }

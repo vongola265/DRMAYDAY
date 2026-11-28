@@ -43,6 +43,9 @@ public class ProfileResponse {
     @JsonProperty("city_address")
     String diaChiTinhTp;
 
+    @JsonProperty("work_place")
+    String workPlace;
+
     @JsonProperty("role_id")
     Long maVaiTro;
 

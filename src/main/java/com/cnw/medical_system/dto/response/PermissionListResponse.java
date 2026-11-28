@@ -1,0 +1,17 @@
+package com.cnw.medical_system.dto.response;
+
+import java.util.List;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.*;
+import lombok.experimental.FieldDefaults;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class PermissionListResponse {
+
+    @JsonProperty("data")
+    List<PermissionResponse> data;
+}

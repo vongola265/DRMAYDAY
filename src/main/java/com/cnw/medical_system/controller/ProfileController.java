@@ -1,6 +1,5 @@
 package com.cnw.medical_system.controller;
 
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -8,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cnw.medical_system.dto.request.UpdateProfileRequest;
+import com.cnw.medical_system.dto.response.ApiResponse;
 import com.cnw.medical_system.dto.response.ProfileResponse;
 import com.cnw.medical_system.service.UserService;
 
@@ -24,12 +24,12 @@ public class ProfileController {
     UserService userService;
 
     @GetMapping
-    public ResponseEntity<ProfileResponse> getUserInfo() {
-        return ResponseEntity.ok(userService.getUserInfo());
+    public ApiResponse<ProfileResponse> getUserInfo() {
+        return ApiResponse.success(userService.getUserInfo());
     }
 
     @PutMapping
-    public ResponseEntity<ProfileResponse> setUserInfo(@RequestBody @Valid UpdateProfileRequest request) {
-        return ResponseEntity.ok(userService.setUserInfo(request));
+    public ApiResponse<ProfileResponse> setUserInfo(@RequestBody @Valid UpdateProfileRequest request) {
+        return ApiResponse.success(userService.setUserInfo(request));
     }
 }

@@ -1,6 +1,6 @@
 package com.cnw.medical_system.dto.response;
 
-import jakarta.validation.constraints.NotBlank;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -14,4 +14,7 @@ public class LoginResponse {
     boolean authenticated;// true nếu thành công
     String tenDangNhap; // tên vai trò
     String vaiTro;// ten vai trò
+
+    @JsonProperty("user_info")
+    UserAdminResponse userInfo;
 }

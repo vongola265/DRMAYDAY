@@ -46,7 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (tokenBlacklistService.isBlacklisted(token)) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json;charset=UTF-8");
-                response.getWriter().write("{\"status\":401, \"message\": \"Token đã hết hiệu lực do đã đăng xuất!\"}");
+                response.getWriter().write("{\"code\":\"9998\", \"message\": \"Token đã hết hiệu lực do đã đăng xuất!\"}");
                 return;
             }
             try {
