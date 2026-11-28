@@ -7,7 +7,7 @@ public record MaydayAttachmentResponse(
         @JsonProperty("attachment_id") String attachmentId,
         @JsonProperty("user_id") String userId,
         @JsonProperty("medical_record_id") String medicalRecordId,
-        @JsonProperty("question_id") String questionId,
+        @JsonProperty("question_id") Long questionId,
         @JsonProperty("file_name") String fileName,
         @JsonProperty("file_type") String fileType,
         @JsonProperty("media_type") String mediaType,

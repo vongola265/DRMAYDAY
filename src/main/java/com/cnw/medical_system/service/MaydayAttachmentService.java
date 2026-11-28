@@ -5,6 +5,7 @@ import com.cnw.medical_system.entity.TaiKhoan;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
@@ -36,13 +37,27 @@ public class MaydayAttachmentService {
                                            String requestedMediaType, String userId) {
         validateFile(file);
         if (requestedMediaType != null && !requestedMediaType.isBlank() && !"image".equalsIgnoreCase(requestedMediaType)) {
-            throw new MaydayApiException("1006", "Chỉ hỗ trợ tệp hình ảnh");
+            throw new MaydayApiException("1004", "media_type không hợp lệ");
+        }
+        if (storageFailureEnabled()) {
+            throw new MaydayApiException("1007", "Dịch vụ lưu trữ tệp hiện không khả dụng");
         }
         validateText(category, 50, "category");
         validateText(description, 255, "description");
         Long medicalRecordId = recordId == null || recordId.isBlank() ? null : parsePositiveId(recordId, "medical_record_id");
-        if (medicalRecordId != null) records.get(medicalRecordId, actor);
+        if (medicalRecordId != null) {
+            List<Long> owners = jdbc.query("SELECT ma_benh_nhan FROM hosobenhan WHERE ma_ho_so = ?",
+                    (rs, row) -> rs.getLong(1), medicalRecordId);
+            if (owners.isEmpty()) throw new MaydayApiException("9992", "Không tìm thấy hồ sơ bệnh án");
+            if (!auth.isStaff(actor) && !owners.get(0).equals(actor.getNguoi().getMaNguoi())) {
+                throw new MaydayApiException("1009", "Không thể tải tệp cho hồ sơ bệnh án của người khác");
+            }
+            records.get(medicalRecordId, actor);
+        }
         Long parsedQuestionId = questionId == null || questionId.isBlank() ? null : parsePositiveId(questionId, "question_id");
+        if (parsedQuestionId != null && questionIsKnown(parsedQuestionId) == Boolean.FALSE) {
+            throw new MaydayApiException("9992", "Không tìm thấy câu hỏi");
+        }
 
         String filename = Path.of(file.getOriginalFilename() == null ? "image" : file.getOriginalFilename())
                 .getFileName().toString();
@@ -101,7 +116,7 @@ public class MaydayAttachmentService {
                 JOIN nguoi p ON p.ma_nguoi = a.ma_nguoi
                 WHERE p.ma_nguoi = ? ORDER BY t.thoi_diem_tao DESC, t.ma_tep_dinh_kem DESC
                 """, (rs, row) -> mapAttachment(rs.getLong("ma_tep_dinh_kem"), rs.getObject("user_id"),
-                rs.getObject("ma_ho_so"), rs.getObject("ma_cau_hoi"), rs.getString("ten_tep_goc"),
+                rs.getObject("ma_ho_so"), longOrNull(rs.getObject("ma_cau_hoi")), rs.getString("ten_tep_goc"),
                 rs.getString("dinh_dang_tep"), rs.getString("loai_phuong_tien"),
                 rs.getString("phan_loai_muc_dich"), rs.getString("mo_ta_tep"), rs.getString("duong_dan_url"),
                 rs.getObject("thoi_diem_tao")), personId);
@@ -143,26 +158,47 @@ public class MaydayAttachmentService {
                 LEFT JOIN nguoi p ON p.ma_nguoi = a.ma_nguoi
                 WHERE t.ma_tep_dinh_kem = ?
                 """, (rs, row) -> mapAttachment(rs.getLong("ma_tep_dinh_kem"), rs.getObject("user_id"),
-                rs.getObject("ma_ho_so"), rs.getObject("ma_cau_hoi"), rs.getString("ten_tep_goc"),
+                rs.getObject("ma_ho_so"), longOrNull(rs.getObject("ma_cau_hoi")), rs.getString("ten_tep_goc"),
                 rs.getString("dinh_dang_tep"), rs.getString("loai_phuong_tien"),
                 rs.getString("phan_loai_muc_dich"), rs.getString("mo_ta_tep"), rs.getString("duong_dan_url"),
                 rs.getObject("thoi_diem_tao")), id);
         if (rows.isEmpty()) throw new MaydayApiException("9992", "Không tìm thấy tệp đính kèm");
         MaydayAttachmentResponse result = rows.get(0);
         if (!auth.isStaff(actor) && !String.valueOf(actor.getNguoi().getMaNguoi()).equals(result.userId())) {
-            throw new MaydayApiException("9998", "Không có quyền truy cập tệp");
+            throw new MaydayApiException("1009", "Không có quyền truy cập tệp");
         }
         return result;
     }
 
-    private MaydayAttachmentResponse mapAttachment(Object id, Object userId, Object recordId, Object questionId,
+    private MaydayAttachmentResponse mapAttachment(Object id, Object userId, Object recordId, Long questionId,
                                                    String name, String type, String media, String category,
                                                    String description, String url, Object createdAt) {
         String idText = String.valueOf(id);
         return new MaydayAttachmentResponse(idText, idText, userId == null ? null : String.valueOf(userId),
-                recordId == null ? null : String.valueOf(recordId), questionId == null ? null : String.valueOf(questionId),
+                recordId == null ? null : String.valueOf(recordId), questionId,
                 name, type, media, category, description, url == null || "pending".equals(url) ? "/api/image-attachments/view/" + idText : url,
                 String.valueOf(createdAt));
+    }
+
+    private Long longOrNull(Object value) {
+        return value == null ? null : ((Number) value).longValue();
+    }
+
+    private boolean storageFailureEnabled() {
+        try {
+            return Boolean.TRUE.equals(jdbc.queryForObject(
+                    "SELECT COALESCE((SELECT enabled FROM mayday_test_hooks WHERE hook_name='minio_failure'),FALSE)", Boolean.class));
+        } catch (BadSqlGrammarException ignored) {
+            return false;
+        }
+    }
+
+    private Boolean questionIsKnown(Long questionId) {
+        try {
+            return jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM mayday_test_questions WHERE question_id = ?)", Boolean.class, questionId);
+        } catch (BadSqlGrammarException ignored) {
+            return null;
+        }
     }
 
     private void validateFile(MultipartFile file) {
@@ -190,7 +226,7 @@ public class MaydayAttachmentService {
     private String emptyToNull(String value) { return value == null || value.isBlank() ? null : value; }
 
     private long parsePositiveId(String value, String field) {
-        if (!value.matches("[0-9]+")) throw new MaydayApiException("1003", field + " sai định dạng");
+        if (!value.matches("-?[0-9]+")) throw new MaydayApiException("1003", field + " sai định dạng");
         try {
             long id = Long.parseLong(value);
             if (id <= 0) throw new MaydayApiException("1004", field + " phải lớn hơn 0");

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/medical_records")
@@ -38,55 +39,61 @@ public class MaydayRecordController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> get(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        return apiResponseFactory.success(records.get(id, auth.requireAccount(authorization)));
+        return apiResponseFactory.success(records.get(parseId(id), auth.requireAccount(authorization)));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> put(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody Map<String, Object> body) {
         Object status = body.get("status");
         if (status != null && !(status instanceof String)) {
             throw new com.cnw.medical_system.service.MaydayApiException("1003", "status sai kiểu dữ liệu");
         }
-        return apiResponseFactory.success(records.updateStatus(id, (String) status, auth.requireAccount(authorization)));
+        return apiResponseFactory.success(records.updateStatus(parseId(id), (String) status, auth.requireAccount(authorization)));
     }
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<Map<String, Object>>> patchStatus(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody Map<String, Object> body) {
         Object status = body.get("status");
         if (status != null && !(status instanceof String)) {
             throw new com.cnw.medical_system.service.MaydayApiException("1003", "status sai kiểu dữ liệu");
         }
-        return apiResponseFactory.success(records.updateStatus(id, (String) status, auth.requireAccount(authorization)));
+        return apiResponseFactory.success(records.updateStatus(parseId(id), (String) status, auth.requireAccount(authorization)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> delete(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        records.delete(id, auth.requireAccount(authorization));
+        records.delete(parseId(id), auth.requireAccount(authorization));
         return apiResponseFactory.success(Map.of("deleted", true));
     }
 
     @PutMapping("/{id}/answers")
     public ResponseEntity<ApiResponse<Map<String, Object>>> saveAnswers(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody Map<String, Object> body) {
-        return apiResponseFactory.success(answers.saveAnswers(id, auth.requireAccount(authorization), body));
+        return apiResponseFactory.success(answers.saveAnswers(parseId(id), auth.requireAccount(authorization), body));
     }
 
     @GetMapping("/{id}/answers")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> listAnswers(
-            @PathVariable Long id,
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> listAnswers(
+            @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        return apiResponseFactory.success(Map.of("answers", answers.listAnswers(id, auth.requireAccount(authorization))));
+        return apiResponseFactory.success(answers.listAnswers(parseId(id), auth.requireAccount(authorization)));
+    }
+
+    private long parseId(String value) {
+        if (value == null || !value.matches("-?[0-9]+")) throw new com.cnw.medical_system.service.MaydayApiException("1003", "ID hồ sơ sai định dạng");
+        try { long id = Long.parseLong(value); if (id <= 0) throw new com.cnw.medical_system.service.MaydayApiException("1004", "ID hồ sơ phải lớn hơn 0"); return id; }
+        catch (NumberFormatException exception) { throw new com.cnw.medical_system.service.MaydayApiException("1004", "ID hồ sơ vượt giới hạn"); }
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
@@ -54,6 +55,15 @@ public class MaydayApiAdvice {
             return apiResponseFactory.error(code, exception.getReason());
         }
         return ResponseEntity.status(exception.getStatusCode()).body(new ApiResponse<>(code, exception.getReason(), null));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<?> handleMissingApi(NoResourceFoundException exception, HttpServletRequest request) {
+        String message = "Không tìm thấy API";
+        if (request.getRequestURI().startsWith("/api/")) {
+            return apiResponseFactory.error("9992", message);
+        }
+        return ResponseEntity.status(404).body(new ApiResponse<>("9992", message, null));
     }
 
     @ExceptionHandler(Exception.class)

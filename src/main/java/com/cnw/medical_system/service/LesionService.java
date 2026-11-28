@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 
@@ -22,6 +23,7 @@ public class LesionService {
     private final LesionEpisodeRepository episodes;
     private final LesionLocationRepository locations;
     private final MaydayPhotoService photos;
+    private final JdbcTemplate jdbc;
 
     @Transactional(readOnly = true)
     public List<LesionEpisodeResponse> listEpisodes() {
@@ -45,18 +47,20 @@ public class LesionService {
 
     @Transactional
     public LesionEpisodeResponse createEpisode(LesionEpisodeRequest request) {
-        return episodeDto(episodes.save(LesionEpisode.builder()
+        LesionEpisode saved = episodes.save(LesionEpisode.builder()
                 .patientId(request.getPatientId())
                 .medicalRecordId(request.getMedicalRecordId())
                 .name(request.getName())
                 .occurredAt(request.getOccurredAt())
-                .circumstance(request.getCircumstance())
+                .circumstance(request.getOtherCircumstance() == null ? null : "Khac")
                 .otherCircumstance(request.getOtherCircumstance())
                 .medication(request.getMedication())
                 .medicationDuration(request.getMedicationDuration())
                 .timeUnit(request.getTimeUnit())
                 .details(request.getDetails())
-                .build()));
+                .build());
+        jdbc.update("UPDATE dottonthuongda SET context_tags = ? WHERE ma_dot_ton_thuong_da = ?", request.getCircumstance(), saved.getId());
+        return episodeDto(saved);
     }
 
     @Transactional
@@ -66,13 +70,15 @@ public class LesionService {
         episode.setMedicalRecordId(request.getMedicalRecordId());
         episode.setName(request.getName());
         episode.setOccurredAt(request.getOccurredAt());
-        episode.setCircumstance(request.getCircumstance());
+        episode.setCircumstance(request.getOtherCircumstance() == null ? null : "Khac");
         episode.setOtherCircumstance(request.getOtherCircumstance());
         episode.setMedication(request.getMedication());
         episode.setMedicationDuration(request.getMedicationDuration());
         episode.setTimeUnit(request.getTimeUnit());
         episode.setDetails(request.getDetails());
-        return episodeDto(episodes.save(episode));
+        LesionEpisode saved = episodes.save(episode);
+        jdbc.update("UPDATE dottonthuongda SET context_tags = ? WHERE ma_dot_ton_thuong_da = ?", request.getCircumstance(), saved.getId());
+        return episodeDto(saved);
     }
 
     @Transactional
@@ -97,16 +103,18 @@ public class LesionService {
     @Transactional
     public LesionLocationResponse createLocation(LesionLocationRequest request) {
         LesionEpisode episode = findEpisode(request.getEpisodeId());
-        return locationDto(locations.save(LesionLocation.builder()
+        LesionLocation saved = locations.save(LesionLocation.builder()
                 .episode(episode)
                 .bodyPart(request.getBodyPart())
                 .occurredAt(request.getOccurredAt())
                 .relatedMedication(request.getRelatedMedication())
                 .medicationDuration(request.getMedicationDuration())
-                .circumstance(request.getCircumstance())
+                .circumstance(request.getOtherCircumstance() == null ? null : "Khac")
                 .otherCircumstance(request.getOtherCircumstance())
                 .timeUnit(request.getTimeUnit())
-                .build()));
+                .build());
+        jdbc.update("UPDATE vitritonthuong SET context_tags = ? WHERE ma_vi_tri_ton_thuong = ?", request.getCircumstance(), saved.getId());
+        return locationDto(saved);
     }
 
     @Transactional
@@ -117,10 +125,12 @@ public class LesionService {
         location.setOccurredAt(request.getOccurredAt());
         location.setRelatedMedication(request.getRelatedMedication());
         location.setMedicationDuration(request.getMedicationDuration());
-        location.setCircumstance(request.getCircumstance());
+        location.setCircumstance(request.getOtherCircumstance() == null ? null : "Khac");
         location.setOtherCircumstance(request.getOtherCircumstance());
         location.setTimeUnit(request.getTimeUnit());
-        return locationDto(locations.save(location));
+        LesionLocation saved = locations.save(location);
+        jdbc.update("UPDATE vitritonthuong SET context_tags = ? WHERE ma_vi_tri_ton_thuong = ?", request.getCircumstance(), saved.getId());
+        return locationDto(saved);
     }
 
     @Transactional
@@ -142,7 +152,7 @@ public class LesionService {
     private LesionEpisodeResponse episodeDto(LesionEpisode episode) {
         return new LesionEpisodeResponse(
                 episode.getId(), episode.getPatientId(), episode.getMedicalRecordId(), episode.getName(),
-                episode.getOccurredAt(), episode.getCircumstance(), episode.getOtherCircumstance(),
+                episode.getOccurredAt(), jdbc.queryForObject("SELECT context_tags FROM dottonthuongda WHERE ma_dot_ton_thuong_da = ?", String.class, episode.getId()), episode.getOtherCircumstance(),
                 episode.getMedication(), episode.getMedicationDuration(), episode.getTimeUnit(),
                 episode.getDetails(), episode.getCreatedAt(), episode.getUpdatedAt());
     }
@@ -150,7 +160,7 @@ public class LesionService {
     private LesionLocationResponse locationDto(LesionLocation location) {
         return new LesionLocationResponse(
                 location.getId(), location.getEpisode().getId(), location.getBodyPart(), location.getOccurredAt(),
-                location.getRelatedMedication(), location.getMedicationDuration(), location.getCircumstance(),
+                location.getRelatedMedication(), location.getMedicationDuration(), jdbc.queryForObject("SELECT context_tags FROM vitritonthuong WHERE ma_vi_tri_ton_thuong = ?", String.class, location.getId()),
                 location.getOtherCircumstance(), location.getTimeUnit(), location.getCreatedAt(),
                 location.getUpdatedAt());
     }

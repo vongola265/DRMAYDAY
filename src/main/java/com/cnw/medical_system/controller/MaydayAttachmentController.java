@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
 
@@ -29,7 +30,7 @@ public class MaydayAttachmentController {
     private final MaydayAttachmentService attachments;
     private final ApiResponseFactory apiResponseFactory;
 
-    @PostMapping(value = "/api/image-attachments/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/api/image-attachments/upload")
     public ResponseEntity<ApiResponse<MaydayAttachmentResponse>> upload(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "file", required = false) MultipartFile file,
@@ -38,13 +39,24 @@ public class MaydayAttachmentController {
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "media_type", required = false) String mediaType,
-            @RequestParam(value = "user_id", required = false) String userId) {
+            @RequestParam(value = "user_id", required = false) String userId,
+            HttpServletRequest request) {
         TaiKhoan actor = auth.requireAccount(authorization);
+        if (file == null && request.getContentType() != null && request.getContentType().toLowerCase().startsWith("application/json")) {
+            throw new com.cnw.medical_system.service.MaydayApiException("1003", "Tệp phải được gửi theo multipart/form-data");
+        }
+        if (file == null && request.getContentType() != null && request.getContentType().toLowerCase().startsWith("multipart/")) {
+            try {
+                if (request.getPart("file") != null) throw new com.cnw.medical_system.service.MaydayApiException("1003", "Trường file phải là một tệp nhị phân");
+            } catch (jakarta.servlet.ServletException | java.io.IOException exception) {
+                throw new com.cnw.medical_system.service.MaydayApiException("1003", "Multipart request không hợp lệ");
+            }
+        }
         return apiResponseFactory.success(attachments.upload(actor, file, medicalRecordId, questionId, category,
                 description, mediaType, userId));
     }
 
-    @PostMapping(value = "/api/image-attachments/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/api/image-attachments/upload-multiple")
     public ResponseEntity<ApiResponse<List<MaydayAttachmentResponse>>> uploadMultiple(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "user_id", required = false) String userId,
@@ -104,7 +116,7 @@ public class MaydayAttachmentController {
     }
 
     private long parseId(String value) {
-        if (!value.matches("[0-9]+")) throw new com.cnw.medical_system.service.MaydayApiException("1003", "ID sai định dạng");
+        if (!value.matches("-?[0-9]+")) throw new com.cnw.medical_system.service.MaydayApiException("1003", "ID sai định dạng");
         try {
             long id = Long.parseLong(value);
             if (id <= 0) throw new com.cnw.medical_system.service.MaydayApiException("1004", "ID phải lớn hơn 0");

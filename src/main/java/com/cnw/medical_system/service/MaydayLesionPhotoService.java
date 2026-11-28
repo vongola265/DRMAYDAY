@@ -55,7 +55,7 @@ public class MaydayLesionPhotoService {
         String milestone = requiredText(body, "milestone");
         if (!MILESTONES.contains(milestone)) throw invalid("milestone không hợp lệ");
         var episode = lesions.getEpisode(episodeId);
-        var record = records.get(episode.getMedicalRecordId(), actor);
+        var record = accessibleRecord(episode.getMedicalRecordId(), actor);
         ensureEditable(record);
         Long locationId = body.containsKey("location_id") ? requiredId(body, "location_id") : null;
         if (locationId != null && !lesions.getLocation(locationId).getEpisodeId().equals(episodeId)) throw invalid("location_id không thuộc episode_id");
@@ -82,8 +82,6 @@ public class MaydayLesionPhotoService {
         var episode = lesions.getEpisode(Long.parseLong(current.episodeId()));
         ensureEditable(records.get(episode.getMedicalRecordId(), actor));
         if (body.isEmpty()) throw new MaydayApiException("1002", "Thiếu trường cần cập nhật");
-        if (body.containsKey("episode_id") && !String.valueOf(requiredId(body, "episode_id")).equals(current.episodeId())) throw invalid("Không thể chuyển ảnh sang đợt khác");
-        if (body.containsKey("attachment_id") && !String.valueOf(requiredId(body, "attachment_id")).equals(current.attachmentId())) throw invalid("Không thể thay tệp ảnh");
         if (body.containsKey("milestone")) {
             String value = requiredText(body, "milestone");
             if (!MILESTONES.contains(value)) throw invalid("milestone không hợp lệ");
@@ -126,8 +124,8 @@ public class MaydayLesionPhotoService {
         if (photo.locationId() != null) {
             var loc = lesions.getLocation(Long.parseLong(photo.locationId()));
             var episode = lesions.getEpisode(loc.getEpisodeId());
-            records.get(episode.getMedicalRecordId(), actor);
-        } else records.get(lesions.getEpisode(Long.parseLong(photo.episodeId())).getMedicalRecordId(), actor);
+            accessibleRecord(episode.getMedicalRecordId(), actor);
+        } else accessibleRecord(lesions.getEpisode(Long.parseLong(photo.episodeId())).getMedicalRecordId(), actor);
         return photo;
     }
 
@@ -158,5 +156,12 @@ public class MaydayLesionPhotoService {
         if(s.length()>500||!(s.startsWith("https://")||s.startsWith("http://"))) throw invalid("annotated_url không hợp lệ"); return s;
     }
     private void ensureEditable(Map<String,Object> record) { Object s=record.get("status"); if("completed".equals(s)||"cancelled".equals(s)) throw new MaydayApiException("1010","Không thể sửa hồ sơ đã đóng"); }
+    private Map<String,Object> accessibleRecord(Long recordId, TaiKhoan actor) {
+        try { return records.get(recordId, actor); }
+        catch (MaydayApiException exception) {
+            if ("9998".equals(exception.getCode())) throw new MaydayApiException("1009", "Hồ sơ thuộc bệnh nhân khác");
+            throw exception;
+        }
+    }
     private MaydayApiException invalid(String m){return new MaydayApiException("1004",m);}
 }

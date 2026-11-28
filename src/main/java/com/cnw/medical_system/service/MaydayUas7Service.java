@@ -40,7 +40,12 @@ public class MaydayUas7Service {
         Integer iss=score(body,"iss7"),hss=score(body,"hss7");
         Object noteRaw=body.get("note"); if(noteRaw!=null&&!(noteRaw instanceof String))throw new MaydayApiException("1003","note sai kiểu dữ liệu");
         String note=(String)noteRaw; if(note!=null&&(note.length()>500||note.matches("(?s).*<[^>]+>.*")))throw new MaydayApiException("1004","note không hợp lệ");
-        Map<String,Object> record=records.get(recordId,actor);
+        Map<String,Object> record;
+        try { record=records.get(recordId,actor); }
+        catch (MaydayApiException exception) {
+            if ("9998".equals(exception.getCode())) throw new MaydayApiException("1009", "Hồ sơ thuộc bệnh nhân khác");
+            throw exception;
+        }
         Object status=record.get("status"); if("completed".equals(status)||"cancelled".equals(status))throw new MaydayApiException("1010","Hồ sơ đã đóng");
         try {
             Long id=jdbc.queryForObject("INSERT INTO nhatkyuashangngay(ma_ho_so_man,ma_benh_nhan,ngay_cham_diem,diem_san_phu_hss,diem_ngua_iss,trang_thai_ngay) VALUES(?,?,?,?,?,'HOP_LE') RETURNING ma_nhat_ky_uas",Long.class,recordId,actor.getNguoi().getMaNguoi(),date,hss,iss);
@@ -60,12 +65,13 @@ public class MaydayUas7Service {
         LocalDate start=end.minusDays(6);
         Map<String,Object> agg=jdbc.queryForObject("SELECT COALESCE(sum(diem_uas_ngay),0) score,count(*) FILTER (WHERE trang_thai_ngay='HOP_LE') days FROM nhatkyuashangngay WHERE ma_benh_nhan=? AND ngay_cham_diem BETWEEN ? AND ?",(rs,n)->Map.of("score",rs.getInt("score"),"days",rs.getInt("days")),patientId,start,end);
         int score=(Integer)agg.get("score"),days=(Integer)agg.get("days"); String label=score==0?"Không có":score<=15?"Nhẹ":score<=27?"Trung bình":"Nặng";
-        Map<String,Object> out=new LinkedHashMap<>();out.put("patient_id",String.valueOf(patientId));out.put("start_date",start.toString());out.put("end_date",end.toString());out.put("week_score",String.valueOf(score));out.put("severity_label",label);out.put("completed_days",String.valueOf(days));return out;
+        List<Map<String,Object>> items=jdbc.query("SELECT ma_nhat_ky_uas id,ma_benh_nhan patient_id,ma_ho_so_man medical_record_id,ngay_cham_diem score_date,diem_ngua_iss iss7,diem_san_phu_hss hss7,diem_uas_ngay uas7 FROM nhatkyuashangngay WHERE ma_benh_nhan=? AND ngay_cham_diem BETWEEN ? AND ? ORDER BY ngay_cham_diem DESC,ma_nhat_ky_uas DESC",(rs,n)->{Map<String,Object> m=new LinkedHashMap<>();m.put("id",String.valueOf(rs.getLong("id")));m.put("patient_id",String.valueOf(rs.getLong("patient_id")));m.put("medical_record_id",String.valueOf(rs.getLong("medical_record_id")));m.put("score_date",rs.getDate("score_date").toLocalDate().toString());m.put("iss7",String.valueOf(rs.getInt("iss7")));m.put("hss7",String.valueOf(rs.getInt("hss7")));m.put("uas7",String.valueOf(rs.getInt("uas7")));return m;},patientId,start,end);
+        Map<String,Object> out=new LinkedHashMap<>();out.put("patient_id",String.valueOf(patientId));out.put("start_date",start.toString());out.put("end_date",end.toString());out.put("week_score",String.valueOf(score));out.put("severity_label",label);out.put("completed_days",String.valueOf(days));out.put("items",items);return out;
     }
 
     private void assertPatientAccess(Long patientId,TaiKhoan actor){if(patientId<=0)throw new MaydayApiException("1004","patient_id phải lớn hơn 0");if(jdbc.queryForObject("SELECT count(*) FROM benhnhan WHERE ma_benh_nhan=?",Integer.class,patientId)==0)throw new MaydayApiException("9992","Không tìm thấy bệnh nhân");if(!auth.isStaff(actor)&&!patientId.equals(actor.getNguoi().getMaNguoi()))throw new MaydayApiException("1009","Không có quyền truy cập dữ liệu bệnh nhân");}
     private void patientOnly(TaiKhoan actor){if(auth.isStaff(actor))throw new MaydayApiException("1009","Chức năng dành cho bệnh nhân");}
-    private int score(Map<String,Object> body,String key){Object v=body.get(key);if(v==null)throw new MaydayApiException("1002","Thiếu "+key);if(!(v instanceof String s)||!s.matches("[0-9]+"))throw new MaydayApiException("1003",key+" sai kiểu dữ liệu");try{int n=Integer.parseInt(s);if(n<0||n>3)throw new MaydayApiException("1004",key+" phải từ 0 đến 3");return n;}catch(NumberFormatException e){throw new MaydayApiException("1004",key+" không hợp lệ");}}
+    private int score(Map<String,Object> body,String key){Object v=body.get(key);if(v==null)throw new MaydayApiException("1002","Thiếu "+key);if(!(v instanceof String s)||!s.matches("-?[0-9]+"))throw new MaydayApiException("1003",key+" sai kiểu dữ liệu");try{int n=Integer.parseInt(s);if(n<0||n>3)throw new MaydayApiException("1004",key+" phải từ 0 đến 3");return n;}catch(NumberFormatException e){throw new MaydayApiException("1004",key+" không hợp lệ");}}
     private long id(Object v,String key){if(v==null)throw new MaydayApiException("1002","Thiếu "+key);if(!(v instanceof String)&&!(v instanceof Number)||v instanceof Number n&&n.doubleValue()%1!=0)throw new MaydayApiException("1003",key+" sai kiểu dữ liệu");try{long x=Long.parseLong(String.valueOf(v));if(x<=0)throw new MaydayApiException("1004",key+" phải lớn hơn 0");return x;}catch(NumberFormatException e){throw new MaydayApiException("1003",key+" sai định dạng");}}
-    private LocalDate parseDate(String text){try{return LocalDate.parse(text);}catch(DateTimeParseException e){throw new MaydayApiException("1003","start_date sai định dạng");}}
+    private LocalDate parseDate(String text){try{return LocalDate.parse(text);}catch(DateTimeParseException e){throw new MaydayApiException("1004","start_date không hợp lệ");}}
 }
